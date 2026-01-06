@@ -50,30 +50,14 @@ class PredictionService:
                 logger.info(f"Cache hit for charger {charger_id}")
                 return cached
             
-            # Extract features
-            features = await self.feature_extractor.extract_failure_features(
-                charger_id, metrics
-            )
-            
             # Load model
             model = await self.model_manager.get_model("failure_predictor")
             if not model:
                 raise ModelNotFoundError("Failure predictor model not loaded")
             
-            # Run prediction
-            # TODO: Implement actual TensorFlow prediction
-            # prediction = model.predict(features)
-            
-            # Placeholder prediction
-            result = {
-                "charger_id": charger_id,
-                "failure_probability": 0.15,
-                "predicted_failure_date": None,
-                "confidence": 0.85,
-                "recommended_action": "Monitor closely",
-                "model_version": "v1.0.0",
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+            # Run prediction using integrated model
+            result = model.predict(metrics)
+            result["timestamp"] = datetime.utcnow().isoformat()
             
             # Cache result
             await self.cache_service.set(cache_key, result, ttl=3600)
@@ -103,27 +87,17 @@ class PredictionService:
             Maintenance schedule recommendation
         """
         try:
-            # Extract features
-            features = await self.feature_extractor.extract_maintenance_features(
-                charger_id, metrics
-            )
+            # First get failure prediction
+            failure_pred = await self.predict_failure(charger_id, metrics)
             
-            # Load model
-            model = await self.model_manager.get_model("maintenance_scheduler")
-            if not model:
-                raise ModelNotFoundError("Maintenance scheduler model not loaded")
+            # Load maintenance optimizer
+            optimizer = await self.model_manager.get_model("maintenance_optimizer")
+            if not optimizer:
+                raise ModelNotFoundError("Maintenance optimizer model not loaded")
             
-            # TODO: Implement actual prediction
-            from datetime import timedelta
-            
-            result = {
-                "charger_id": charger_id,
-                "recommended_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
-                "urgency": "MEDIUM",
-                "estimated_downtime_hours": 2.0,
-                "model_version": "v1.0.0",
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+            # Generate maintenance recommendation
+            result = optimizer.recommend(metrics, failure_pred)
+            result["timestamp"] = datetime.utcnow().isoformat()
             
             prediction_requests.labels(model_type="maintenance_scheduler", status="success").inc()
             

@@ -8,13 +8,18 @@ pydantic-settings==2.1.0
 # IMPORTANT: TensorFlow requires Python 3.11 or 3.12 (not 3.14)
 # If you have Python 3.14, please install Python 3.11 or 3.12 for this project
 # Or use: py -3.11 -m pip install -r requirements.txt (if Python 3.11 is installed)
-tensorflow==2.15.0; python_version<"3.13"
+# Note: TensorFlow 2.15.0 is no longer available on PyPI
+# RECOMMENDED: Use Python 3.11 for best compatibility (fewer dependency issues)
+# These versions work well with Python 3.11:
+tensorflow==2.16.1; python_version<"3.13"
 # Alternative: Use PyTorch if TensorFlow is not available
 # torch>=2.1.0
 # torchvision>=0.16.0
+# numpy 1.24.3 works with Python 3.11 (has wheels, no build needed)
 numpy==1.24.3
 pandas==2.1.3
 scikit-learn==1.3.2
+joblib==1.3.2
 
 # Database
 sqlalchemy==2.0.23

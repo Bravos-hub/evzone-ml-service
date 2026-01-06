@@ -2,7 +2,7 @@
 Model management API endpoints.
 """
 from fastapi import APIRouter, HTTPException, Depends, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 
@@ -30,6 +30,8 @@ class ModelListResponse(BaseModel):
 
 class ReloadModelResponse(BaseModel):
     """Model reload response."""
+    model_config = ConfigDict(protected_namespaces=())
+    
     success: bool
     model_name: str
     version: str

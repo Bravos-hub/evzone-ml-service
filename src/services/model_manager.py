@@ -1,7 +1,4 @@
-"""
-Model manager for loading, versioning, and managing ML models.
-"""
-import os
+"""Model manager for loading, versioning, and managing ML models."""
 import logging
 from typing import Optional, Dict, Any
 from pathlib import Path
@@ -19,6 +16,20 @@ class ModelManager:
     def __init__(self):
         self.models: Dict[str, Any] = {}
         self.model_base_path = Path(settings.model_base_path)
+        self._initialize_models()
+    
+    def _initialize_models(self):
+        """Initialize ML model instances."""
+        try:
+            from src.ml.models import FailurePredictor, AnomalyDetector, MaintenanceOptimizer
+            
+            self.models["failure_predictor"] = FailurePredictor()
+            self.models["anomaly_detector"] = AnomalyDetector()
+            self.models["maintenance_optimizer"] = MaintenanceOptimizer()
+            
+            logger.info("ML models initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize models: {e}")
     
     async def load_model(self, model_name: str, version: str = "latest") -> bool:
         """
@@ -32,34 +43,25 @@ class ModelManager:
             True if loaded successfully
         """
         try:
-            model_path = self.model_base_path / model_name / version
+            # Models are already initialized in __init__
+            if model_name in self.models:
+                logger.info(f"Model {model_name} already loaded")
+                return True
             
-            if not model_path.exists():
-                raise ModelNotFoundError(f"Model {model_name} v{version} not found at {model_path}")
+            # Reinitialize if needed
+            self._initialize_models()
             
-            # TODO: Implement actual TensorFlow model loading
-            # import tensorflow as tf
-            # model = tf.keras.models.load_model(str(model_path))
+            if model_name in self.models:
+                active_models.labels(model_type=model_name).inc()
+                return True
             
-            # Placeholder: Store model metadata
-            self.models[model_name] = {
-                "name": model_name,
-                "version": version,
-                "path": str(model_path),
-                "loaded": True,
-                # "model": model,  # Actual model object
-            }
-            
-            logger.info(f"Model {model_name} v{version} loaded successfully")
-            active_models.labels(model_type=model_name).inc()
-            
-            return True
+            raise ModelNotFoundError(f"Model {model_name} not available")
             
         except Exception as e:
             logger.error(f"Failed to load model {model_name}: {e}")
             raise ModelLoadError(f"Failed to load model: {str(e)}")
     
-    async def get_model(self, model_name: str) -> Optional[Dict[str, Any]]:
+    async def get_model(self, model_name: str) -> Optional[Any]:
         """
         Get a loaded model.
         
@@ -112,10 +114,11 @@ class ModelManager:
         """
         return {
             name: {
-                "name": info["name"],
-                "version": info["version"],
-                "status": "LOADED" if info["loaded"] else "UNLOADED",
+                "name": name,
+                "version": "v1.0.0",
+                "status": "LOADED",
+                "type": type(model).__name__,
             }
-            for name, info in self.models.items()
+            for name, model in self.models.items()
         }
 

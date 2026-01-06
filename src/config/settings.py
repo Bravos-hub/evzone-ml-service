@@ -2,6 +2,7 @@
 Application configuration using Pydantic Settings.
 """
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from typing import Optional
 
 
@@ -63,10 +64,12 @@ class Settings(BaseSettings):
     enable_training: bool = False
     enable_batch_predictions: bool = True
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        protected_namespaces=("settings_",),  # Fix for model_* field warnings
+    )
 
 
 # Global settings instance

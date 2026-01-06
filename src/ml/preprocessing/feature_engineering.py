@@ -1,38 +1,63 @@
-"""
-Feature engineering utilities.
-"""
-import numpy as np
-from typing import List, Dict, Any
+"""Feature engineering for charger metrics."""
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any
+
+STATUS_TO_INT = {
+    "AVAILABLE": 0,
+    "CHARGING": 1,
+    "OCCUPIED": 2,
+    "FULLY_CHARGED": 3,
+    "UNAVAILABLE": 4,
+    "OFFLINE": 5,
+    "FAULTY": 6,
+}
 
 
-def normalize_features(features: np.ndarray, mean: np.ndarray, std: np.ndarray) -> np.ndarray:
-    """
-    Normalize features using mean and standard deviation.
+def safe_now() -> datetime:
+    """Get current UTC datetime."""
+    return datetime.now(timezone.utc)
+
+
+def days_since(dt: Optional[datetime]) -> float:
+    """Calculate days since a given datetime."""
+    if dt is None:
+        return 9999.0
+    now = safe_now()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return max((now - dt).total_seconds() / 86400.0, 0.0)
+
+
+def extract_features(metrics: Dict[str, Any]) -> Dict[str, float]:
+    """Convert charger metrics into numeric features."""
+    status_int = float(STATUS_TO_INT.get(metrics.get("connector_status", ""), 0))
+    error_count = float(len(metrics.get("error_codes", [])))
+    last_maint_days = days_since(metrics.get("last_maintenance"))
     
-    Args:
-        features: Raw features
-        mean: Mean values for normalization
-        std: Standard deviation values for normalization
-        
-    Returns:
-        Normalized features
-    """
-    return (features - mean) / (std + 1e-8)
+    return {
+        "status_int": status_int,
+        "energy_delivered": float(metrics.get("energy_delivered", 0.0)),
+        "power": float(metrics.get("power", 0.0)),
+        "temperature": float(metrics.get("temperature", 0.0)),
+        "error_count": error_count,
+        "uptime_hours": float(metrics.get("uptime_hours", 0.0)),
+        "total_sessions": float(metrics.get("total_sessions", 0.0)),
+        "days_since_maintenance": float(last_maint_days),
+    }
 
 
-def create_time_features(timestamp) -> List[float]:
-    """
-    Create time-based features.
-    
-    Args:
-        timestamp: Datetime object
-        
-    Returns:
-        List of time features (hour, day_of_week, month, etc.)
-    """
-    return [
-        timestamp.hour / 24.0,
-        timestamp.weekday() / 7.0,
-        timestamp.month / 12.0,
-    ]
+FEATURE_ORDER: List[str] = [
+    "status_int",
+    "energy_delivered",
+    "power",
+    "temperature",
+    "error_count",
+    "uptime_hours",
+    "total_sessions",
+    "days_since_maintenance",
+]
 
+
+def features_to_vector(features: Dict[str, float]) -> List[float]:
+    """Convert feature dict to ordered vector."""
+    return [float(features.get(k, 0.0)) for k in FEATURE_ORDER]
