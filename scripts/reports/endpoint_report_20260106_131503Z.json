@@ -1,0 +1,216 @@
+{
+  "timestamp": "2026-01-06T13:15:03.331955Z",
+  "base_url": "http://localhost:8000",
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0,
+    "success_rate": 100.0,
+    "avg_latency_ms": 136.87,
+    "fastest": {
+      "name": "Auth (invalid key)",
+      "path": "/api/v1/models",
+      "latency_ms": 1.75
+    },
+    "slowest": {
+      "name": "Models (list)",
+      "path": "/api/v1/models",
+      "latency_ms": 1122.68
+    },
+    "categories": [
+      {
+        "category": "root",
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "avg_latency_ms": 2.63
+      },
+      {
+        "category": "health",
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "avg_latency_ms": 4.05
+      },
+      {
+        "category": "models",
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "avg_latency_ms": 563.15
+      },
+      {
+        "category": "predictions",
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "avg_latency_ms": 100.29
+      },
+      {
+        "category": "auth",
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "avg_latency_ms": 1.98
+      }
+    ]
+  },
+  "results": [
+    {
+      "name": "Root",
+      "method": "GET",
+      "path": "/",
+      "category": "root",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 2.63,
+      "error": null
+    },
+    {
+      "name": "Health",
+      "method": "GET",
+      "path": "/health",
+      "category": "health",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 3.94,
+      "error": null
+    },
+    {
+      "name": "Health (detailed)",
+      "method": "GET",
+      "path": "/api/v1/health",
+      "category": "health",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 4.17,
+      "error": null
+    },
+    {
+      "name": "Models (list)",
+      "method": "GET",
+      "path": "/api/v1/models",
+      "category": "models",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 1122.68,
+      "error": null
+    },
+    {
+      "name": "Models (reload)",
+      "method": "POST",
+      "path": "/api/v1/models/reload",
+      "category": "models",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 3.62,
+      "error": null
+    },
+    {
+      "name": "Prediction (failure)",
+      "method": "POST",
+      "path": "/api/v1/predictions/failure",
+      "category": "predictions",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 170.18,
+      "error": null
+    },
+    {
+      "name": "Prediction (maintenance)",
+      "method": "POST",
+      "path": "/api/v1/predictions/maintenance",
+      "category": "predictions",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 160.06,
+      "error": null
+    },
+    {
+      "name": "Prediction (anomaly)",
+      "method": "POST",
+      "path": "/api/v1/predictions/anomaly",
+      "category": "predictions",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 165.14,
+      "error": null
+    },
+    {
+      "name": "Prediction (batch)",
+      "method": "POST",
+      "path": "/api/v1/predictions/batch",
+      "category": "predictions",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 2.76,
+      "error": null
+    },
+    {
+      "name": "Prediction (cached)",
+      "method": "GET",
+      "path": "/api/v1/predictions/CHG_TEST_001",
+      "category": "predictions",
+      "expected_status": [
+        200
+      ],
+      "status_code": 200,
+      "ok": true,
+      "latency_ms": 3.31,
+      "error": null
+    },
+    {
+      "name": "Auth (invalid key)",
+      "method": "GET",
+      "path": "/api/v1/models",
+      "category": "auth",
+      "expected_status": [
+        401
+      ],
+      "status_code": 401,
+      "ok": true,
+      "latency_ms": 1.75,
+      "error": null
+    },
+    {
+      "name": "Auth (missing key)",
+      "method": "GET",
+      "path": "/api/v1/models",
+      "category": "auth",
+      "expected_status": [
+        422
+      ],
+      "status_code": 422,
+      "ok": true,
+      "latency_ms": 2.21,
+      "error": null
+    }
+  ]
+}
