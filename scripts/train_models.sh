@@ -9,9 +9,12 @@ echo "Starting model training..."
 echo "Training failure prediction model..."
 python -m src.ml.training.train_failure_model
 
+# Train anomaly detection model
+echo "Training anomaly detection model..."
+python -m src.ml.training.train_anomaly_model
+
 # Train maintenance scheduling model
 echo "Training maintenance scheduling model..."
 python -m src.ml.training.train_maintenance_model
 
 echo "Model training completed!"
-
