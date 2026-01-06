@@ -107,8 +107,10 @@ class CacheService:
         return cls._cache_hits / total if total > 0 else 0.0
     
     @classmethod
-    def _build_key(cls, cache_type: CacheType, charger_id: str) -> str:
+    def _build_key(cls, cache_type: CacheType, charger_id: str, tenant_id: Optional[str] = None) -> str:
         """Build versioned cache key."""
+        if tenant_id:
+            return f"prediction:{cache_type}:{settings.cache_version}:{tenant_id}:{charger_id}"
         return f"prediction:{cache_type}:{settings.cache_version}:{charger_id}"
     
     @classmethod
@@ -170,24 +172,24 @@ class CacheService:
             logger.error(f"Unexpected cache set error: {e}")
             return False
     
-    async def get_prediction(self, cache_type: CacheType, charger_id: str) -> Optional[dict]:
+    async def get_prediction(self, cache_type: CacheType, charger_id: str, tenant_id: Optional[str] = None) -> Optional[dict]:
         """Get prediction from cache with versioned key."""
-        key = self._build_key(cache_type, charger_id)
+        key = self._build_key(cache_type, charger_id, tenant_id=tenant_id)
         return await self.get(key)
     
-    async def set_prediction(self, cache_type: CacheType, charger_id: str, value: dict) -> bool:
+    async def set_prediction(self, cache_type: CacheType, charger_id: str, value: dict, tenant_id: Optional[str] = None) -> bool:
         """Set prediction in cache with versioned key and type-specific TTL."""
-        key = self._build_key(cache_type, charger_id)
+        key = self._build_key(cache_type, charger_id, tenant_id=tenant_id)
         ttl = self._get_ttl(cache_type)
         return await self.set(key, value, ttl)
     
-    async def invalidate_prediction(self, cache_type: CacheType, charger_id: str) -> bool:
+    async def invalidate_prediction(self, cache_type: CacheType, charger_id: str, tenant_id: Optional[str] = None) -> bool:
         """Invalidate cached prediction."""
         if not self._client or not self._is_healthy:
             return False
         
         try:
-            key = self._build_key(cache_type, charger_id)
+            key = self._build_key(cache_type, charger_id, tenant_id=tenant_id)
             await self._client.delete(key)
             logger.info(f"Cache INVALIDATED: {key}")
             return True
@@ -211,4 +213,3 @@ class CacheService:
         except Exception as e:
             logger.warning(f"Bulk invalidation error: {e}")
             return 0
-

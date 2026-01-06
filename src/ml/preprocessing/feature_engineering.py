@@ -22,6 +22,11 @@ def days_since(dt: Optional[datetime]) -> float:
     """Calculate days since a given datetime."""
     if dt is None:
         return 9999.0
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except ValueError:
+            return 9999.0
     now = safe_now()
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)

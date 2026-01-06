@@ -5,7 +5,8 @@ import json
 import logging
 from confluent_kafka import Consumer, KafkaError
 from src.config.settings import settings
-from src.kafka.topics import CHARGER_METRICS_TOPIC
+from src.kafka.topics import CHARGER_METRICS_TOPIC, ANOMALIES_TOPIC, FAILURE_ALERTS_TOPIC
+from src.kafka.producer import KafkaProducer
 from src.services.data_collector import DataCollector
 from src.services.prediction_service import PredictionService
 
@@ -19,15 +20,18 @@ class KafkaConsumer:
         self,
         data_collector: DataCollector,
         prediction_service: PredictionService,
+        producer: KafkaProducer = None,
     ):
         self.data_collector = data_collector
         self.prediction_service = prediction_service
+        self.producer = producer or KafkaProducer()
         self.consumer: Consumer = None
         self.running = False
     
     async def start(self):
         """Start Kafka consumer."""
         try:
+            await self.producer.start()
             self.consumer = Consumer({
                 'bootstrap.servers': settings.kafka_brokers,
                 'group.id': settings.kafka_group_id,
@@ -73,21 +77,40 @@ class KafkaConsumer:
         """Process a single Kafka message."""
         try:
             message = json.loads(message_value)
-            charger_id = message.get("charger_id")
+            metrics = message.get("metrics") if isinstance(message.get("metrics"), dict) else message
+            charger_id = message.get("charger_id") or metrics.get("charger_id")
+            tenant_id = message.get("tenant_id") or message.get("operator_id")
             
             if not charger_id:
                 logger.warning("Message missing charger_id, skipping")
                 return
+            
+            if isinstance(metrics, dict):
+                metrics.setdefault("charger_id", charger_id)
             
             # Collect data for training
             await self.data_collector.collect_charger_metrics(message)
             
             # Trigger prediction if enabled
             if settings.enable_predictions:
-                await self.prediction_service.predict_failure(
+                failure_pred = await self.prediction_service.predict_failure(
                     charger_id,
-                    message.get("metrics", {}),
+                    metrics,
+                    tenant_id=tenant_id,
                 )
+                if failure_pred and failure_pred.get("failure_probability", 0.0) >= 0.85:
+                    payload = dict(failure_pred)
+                    payload["source_topic"] = CHARGER_METRICS_TOPIC
+                    await self.producer.publish(FAILURE_ALERTS_TOPIC, payload)
+            
+            # Anomaly detection
+            detector = await self.prediction_service.model_manager.get_model("anomaly_detector")
+            if detector:
+                anomaly_result = detector.detect(metrics, tenant_id=tenant_id)
+                if anomaly_result.get("is_anomaly"):
+                    payload = dict(anomaly_result)
+                    payload["source_topic"] = CHARGER_METRICS_TOPIC
+                    await self.producer.publish(ANOMALIES_TOPIC, payload)
             
         except Exception as e:
             logger.error(f"Failed to process message: {e}")
@@ -98,4 +121,3 @@ class KafkaConsumer:
         if self.consumer:
             self.consumer.close()
         logger.info("Kafka consumer stopped")
-

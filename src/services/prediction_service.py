@@ -31,6 +31,7 @@ class PredictionService:
         self,
         charger_id: str,
         metrics: Dict[str, Any],
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Predict charger failure.
@@ -44,7 +45,7 @@ class PredictionService:
         """
         try:
             # Check cache first (non-blocking)
-            cached = await self.cache_service.get_prediction("failure", charger_id)
+            cached = await self.cache_service.get_prediction("failure", charger_id, tenant_id=tenant_id)
             if cached:
                 logger.info(f"Cache HIT for charger {charger_id}")
                 return cached
@@ -55,11 +56,13 @@ class PredictionService:
                 raise ModelNotFoundError("Failure predictor model not loaded")
             
             # Run prediction using integrated model
-            result = model.predict(metrics)
+            result = model.predict(metrics, tenant_id=tenant_id)
             result["timestamp"] = datetime.utcnow().isoformat()
+            if tenant_id:
+                result["tenant_id"] = tenant_id
             
             # Cache result (non-blocking)
-            await self.cache_service.set_prediction("failure", charger_id, result)
+            await self.cache_service.set_prediction("failure", charger_id, result, tenant_id=tenant_id)
             
             prediction_requests.labels(model_type="failure_predictor", status="success").inc()
             
@@ -74,6 +77,7 @@ class PredictionService:
         self,
         charger_id: str,
         metrics: Dict[str, Any],
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Predict optimal maintenance schedule.
@@ -87,7 +91,13 @@ class PredictionService:
         """
         try:
             # First get failure prediction
-            failure_pred = await self.predict_failure(charger_id, metrics)
+            failure_pred = await self.predict_failure(charger_id, metrics, tenant_id=tenant_id)
+            predicted_date = failure_pred.get("predicted_failure_date")
+            if isinstance(predicted_date, str):
+                try:
+                    failure_pred["predicted_failure_date"] = datetime.fromisoformat(predicted_date.replace("Z", "+00:00"))
+                except ValueError:
+                    pass
             
             # Load maintenance optimizer
             optimizer = await self.model_manager.get_model("maintenance_optimizer")
@@ -95,8 +105,10 @@ class PredictionService:
                 raise ModelNotFoundError("Maintenance optimizer model not loaded")
             
             # Generate maintenance recommendation
-            result = optimizer.recommend(metrics, failure_pred)
+            result = optimizer.recommend(metrics, failure_pred, tenant_id=tenant_id)
             result["timestamp"] = datetime.utcnow().isoformat()
+            if tenant_id:
+                result["tenant_id"] = tenant_id
             
             prediction_requests.labels(model_type="maintenance_scheduler", status="success").inc()
             
@@ -106,4 +118,3 @@ class PredictionService:
             logger.error(f"Maintenance prediction failed for charger {charger_id}: {e}")
             prediction_requests.labels(model_type="maintenance_scheduler", status="error").inc()
             raise PredictionError(f"Failed to predict maintenance: {str(e)}")
-

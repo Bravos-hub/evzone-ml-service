@@ -2,14 +2,20 @@
 FastAPI application entry point for EVzone ML Service.
 """
 import os
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
 
 from src.config.settings import settings
 from src.api.routes import predictions, health, models
 from src.utils.logging import setup_logging
+from src.services.data_collector import DataCollector
+from src.services.feature_extractor import FeatureExtractor
+from src.services.model_manager import ModelManager
+from src.services.prediction_service import PredictionService
+from src.kafka.consumer import KafkaConsumer
 
 # Setup logging
 logger = setup_logging()
@@ -25,11 +31,28 @@ async def lifespan(app: FastAPI):
     # Initialize Redis cache
     from src.services.cache_service import CacheService
     await CacheService.initialize()
-    
+
+    consumer_task = None
+    kafka_consumer = None
+    if settings.enable_kafka_consumer:
+        model_manager = ModelManager()
+        cache_service = CacheService()
+        feature_extractor = FeatureExtractor()
+        prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
+        data_collector = DataCollector()
+        kafka_consumer = KafkaConsumer(data_collector, prediction_service)
+        consumer_task = asyncio.create_task(kafka_consumer.start())
+
     yield
     
     # Shutdown
     logger.info("Shutting down ML service")
+    if kafka_consumer:
+        await kafka_consumer.stop()
+    if consumer_task:
+        consumer_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await consumer_task
     await CacheService.close()
 
 
@@ -88,4 +111,3 @@ if __name__ == "__main__":
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )
-

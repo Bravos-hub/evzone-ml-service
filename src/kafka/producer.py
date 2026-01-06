@@ -36,21 +36,31 @@ class KafkaProducer:
         Args:
             prediction: Prediction result dictionary
         """
+        await self.publish(PREDICTIONS_TOPIC, prediction)
+
+    async def publish(self, topic: str, payload: Dict[str, Any]):
+        """
+        Publish payload to a Kafka topic.
+        
+        Args:
+            topic: Target Kafka topic
+            payload: Message payload
+        """
         if not self.producer:
             logger.warning("Producer not initialized, skipping publish")
             return
         
         try:
-            message = json.dumps(prediction)
+            message = json.dumps(payload, default=str)
             self.producer.produce(
-                PREDICTIONS_TOPIC,
+                topic,
                 value=message.encode('utf-8'),
                 callback=self._delivery_callback,
             )
             self.producer.poll(0)
             
         except Exception as e:
-            logger.error(f"Failed to publish prediction: {e}")
+            logger.error(f"Failed to publish to {topic}: {e}")
     
     def _delivery_callback(self, err, msg):
         """Callback for message delivery."""
@@ -70,4 +80,3 @@ class KafkaProducer:
             await self.flush()
             # Producer doesn't have explicit close, just flush
         logger.info("Kafka producer stopped")
-

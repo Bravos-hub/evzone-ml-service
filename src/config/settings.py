@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # API Authentication
     api_key: str
     api_key_header: str = "X-API-Key"
+    tenant_header: str = "X-Tenant-ID"
 
     # Database
     database_url: str
@@ -34,6 +35,8 @@ class Settings(BaseSettings):
     kafka_group_id: str = "ml-service-group"
     kafka_topic_charger_metrics: str = "charger.metrics"
     kafka_topic_predictions: str = "ml.predictions"
+    kafka_topic_anomalies: str = "charger.anomalies"
+    kafka_topic_failure_alerts: str = "charger.failure_alerts"
 
     # Redis
     redis_url: str = "redis://localhost:6379"
@@ -73,6 +76,7 @@ class Settings(BaseSettings):
     enable_predictions: bool = True
     enable_training: bool = False
     enable_batch_predictions: bool = True
+    enable_kafka_consumer: bool = False
 
     model_config = ConfigDict(
         env_file=".env",
@@ -84,4 +88,3 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
-
