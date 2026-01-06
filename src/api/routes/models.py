@@ -49,26 +49,23 @@ async def list_models(
     Returns information about loaded and available models.
     """
     try:
-        # TODO: Implement model listing from model_manager
-        # Placeholder response
-        models = [
-            ModelInfo(
-                name="failure_predictor",
-                version="v1.0.0",
-                type="classification",
-                status="LOADED",
-                loaded_at=datetime.utcnow(),
-                accuracy=0.92,
-            ),
-            ModelInfo(
-                name="maintenance_scheduler",
-                version="v1.0.0",
-                type="regression",
-                status="LOADED",
-                loaded_at=datetime.utcnow(),
-                accuracy=0.88,
-            ),
-        ]
+        from src.services.model_manager import ModelManager
+        
+        model_manager = ModelManager()
+        loaded_models = await model_manager.list_models()
+        
+        models = []
+        for name, info in loaded_models.items():
+            models.append(
+                ModelInfo(
+                    name=info["name"],
+                    version=info["version"],
+                    type=info["type"],
+                    status=info["status"],
+                    loaded_at=datetime.utcnow(),
+                    accuracy=None,
+                )
+            )
         
         return ModelListResponse(
             models=models,

@@ -210,8 +210,7 @@ async def get_cached_prediction(
         from src.services.cache_service import CacheService
         
         cache_service = CacheService()
-        cache_key = f"prediction:failure:{charger_id}"
-        cached = await cache_service.get(cache_key)
+        cached = await cache_service.get_prediction("failure", charger_id)
         
         if not cached:
             raise HTTPException(

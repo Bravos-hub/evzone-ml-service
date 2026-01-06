@@ -43,11 +43,10 @@ class PredictionService:
             Prediction result with failure probability and recommendations
         """
         try:
-            # Check cache first
-            cache_key = f"prediction:failure:{charger_id}"
-            cached = await self.cache_service.get(cache_key)
+            # Check cache first (non-blocking)
+            cached = await self.cache_service.get_prediction("failure", charger_id)
             if cached:
-                logger.info(f"Cache hit for charger {charger_id}")
+                logger.info(f"Cache HIT for charger {charger_id}")
                 return cached
             
             # Load model
@@ -59,8 +58,8 @@ class PredictionService:
             result = model.predict(metrics)
             result["timestamp"] = datetime.utcnow().isoformat()
             
-            # Cache result
-            await self.cache_service.set(cache_key, result, ttl=3600)
+            # Cache result (non-blocking)
+            await self.cache_service.set_prediction("failure", charger_id, result)
             
             prediction_requests.labels(model_type="failure_predictor", status="success").inc()
             

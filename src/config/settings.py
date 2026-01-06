@@ -39,7 +39,17 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     redis_password: Optional[str] = None
     redis_db: int = 0
-    cache_ttl: int = 3600  # 1 hour
+    redis_socket_connect_timeout: int = 5
+    redis_socket_timeout: int = 5
+    redis_max_connections: int = 50
+    redis_retry_on_timeout: bool = True
+    
+    # Cache
+    cache_version: str = "v1"
+    cache_ttl_failure_prediction: int = 3600  # 1 hour
+    cache_ttl_maintenance: int = 1800  # 30 minutes
+    cache_ttl_anomaly: int = 300  # 5 minutes
+    cache_enabled: bool = True
 
     # ML Models
     model_base_path: str = "./models"

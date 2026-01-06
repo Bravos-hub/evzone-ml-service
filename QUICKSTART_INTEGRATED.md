@@ -87,7 +87,7 @@ curl -X POST http://localhost:8000/api/v1/predictions/failure \
       "last_maintenance": "2024-06-01T10:00:00Z",
       "metadata": {}
     }
-  }'
+  '
 ```
 
 ### 4. Detect Anomaly
@@ -109,7 +109,7 @@ curl -X POST http://localhost:8000/api/v1/predictions/anomaly \
       "last_maintenance": "2024-06-01T10:00:00Z",
       "metadata": {}
     }
-  }'
+  '
 ```
 
 ### 5. Get Maintenance Schedule
@@ -131,7 +131,7 @@ curl -X POST http://localhost:8000/api/v1/predictions/maintenance \
       "last_maintenance": "2024-01-01T10:00:00Z",
       "metadata": {"cost_per_kwh": 3000}
     }
-  }'
+  '
 ```
 
 ## Generate Test Data

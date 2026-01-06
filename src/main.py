@@ -22,13 +22,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Environment: {settings.environment}")
     
-    # Initialize services here (model loading, Kafka consumers, etc.)
-    # This will be implemented when services are created
+    # Initialize Redis cache
+    from src.services.cache_service import CacheService
+    await CacheService.initialize()
     
     yield
     
     # Shutdown
     logger.info("Shutting down ML service")
+    await CacheService.close()
 
 
 # Create FastAPI application
