@@ -45,8 +45,6 @@ pip install -r requirements.txt
 
 If you prefer not to install Python 3.11/3.12, use Docker:
 
-```powershell
-cd C:\Users\user\Desktop\evzone-portal\evzone-ml-service
 
 # Build and run with Docker
 docker-compose up -d
