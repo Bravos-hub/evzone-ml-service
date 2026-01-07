@@ -26,3 +26,14 @@ def mock_charger_metrics():
         "total_sessions": 150,
     }
 
+
+@pytest.fixture
+def auth_headers(monkeypatch):
+    """Auth headers for API tests."""
+    from src.config.settings import settings
+
+    monkeypatch.setattr(settings, "api_key", "test-api-key")
+    return {
+        "X-API-Key": "test-api-key",
+        "X-Tenant-ID": "test-tenant",
+    }

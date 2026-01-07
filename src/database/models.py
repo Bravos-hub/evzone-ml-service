@@ -58,7 +58,7 @@ class ModelMetadata(Base):
     # Model info
     accuracy = Column(Float)
     path = Column(String)
-    metadata = Column(JSON)
+    metadata_ = Column("metadata", JSON)
     
     # Status
     status = Column(String, default="UNLOADED")  # LOADED, UNLOADED, ERROR
@@ -66,4 +66,3 @@ class ModelMetadata(Base):
     
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
-

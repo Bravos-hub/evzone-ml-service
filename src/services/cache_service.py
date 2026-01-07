@@ -68,7 +68,7 @@ class CacheService:
     async def close(cls):
         """Close Redis connection (call on app shutdown)."""
         if cls._client:
-            await cls._client.close()
+            await cls._client.aclose()
             logger.info("Redis connection closed")
     
     @classmethod
