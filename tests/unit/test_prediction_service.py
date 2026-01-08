@@ -157,3 +157,25 @@ async def test_predict_maintenance_missing_optimizer_raises():
     service = PredictionService(model_manager, object(), cache)
     with pytest.raises(PredictionError):
         await service.predict_maintenance("c1", {"charger_id": "c1"}, tenant_id="t1")
+
+
+@pytest.mark.asyncio
+async def test_predict_maintenance_invalid_failure_date():
+    cache = DummyCacheService()
+    failure_model = DummyFailureModel(
+        {
+            "charger_id": "c1",
+            "failure_probability": 0.4,
+            "predicted_failure_date": "not-a-date",
+        }
+    )
+    maintenance_model = DummyMaintenanceModel()
+    model_manager = DummyModelManager(
+        failure_model=failure_model,
+        maintenance_model=maintenance_model,
+    )
+
+    service = PredictionService(model_manager, object(), cache)
+    result = await service.predict_maintenance("c1", {"charger_id": "c1"}, tenant_id="t1")
+
+    assert result["charger_id"] == "c1"

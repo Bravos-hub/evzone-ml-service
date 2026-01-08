@@ -120,3 +120,45 @@ def test_delivery_callback_logs_success(monkeypatch):
 
     assert len(dummy_logger.debugs) == 1
     assert "Message delivered" in dummy_logger.debugs[0]
+
+
+@pytest.mark.asyncio
+async def test_start_failure(monkeypatch):
+    def raise_producer(config):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("src.kafka.producer.Producer", raise_producer)
+    producer = KafkaProducer()
+    with pytest.raises(RuntimeError):
+        await producer.start()
+
+
+@pytest.mark.asyncio
+async def test_publish_prediction_calls_publish(monkeypatch):
+    producer = KafkaProducer()
+    calls = []
+
+    async def fake_publish(topic, payload):
+        calls.append((topic, payload))
+
+    monkeypatch.setattr(producer, "publish", fake_publish)
+    await producer.publish_prediction({"id": 1})
+
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_publish_logs_error(monkeypatch):
+    class ExplodingProducer(DummyProducer):
+        def produce(self, topic, value, callback=None):
+            raise RuntimeError("boom")
+
+    dummy_logger = DummyLogger()
+    monkeypatch.setattr("src.kafka.producer.logger", dummy_logger)
+
+    producer = KafkaProducer()
+    producer.producer = ExplodingProducer({})
+    await producer.publish("topic-a", {"value": 1})
+
+    assert len(dummy_logger.errors) == 1
+    assert "Failed to publish" in dummy_logger.errors[0]

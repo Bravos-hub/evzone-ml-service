@@ -1,12 +1,15 @@
 """
 Unit tests for training script main entrypoints.
 """
+import runpy
+import sys
 from pathlib import Path as RealPath
 
 import pandas as pd
 import pytest
 from sklearn.ensemble import IsolationForest as SkIsolationForest
 from sklearn.ensemble import RandomForestClassifier as SkRandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier as SkGradientBoostingClassifier
 
 from src.ml.training import train_failure_model
 from src.ml.training import train_anomaly_model
@@ -41,13 +44,23 @@ def _write_anomaly_dataset(base_dir: RealPath, rows: int = 20) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     records = []
     for i in range(rows):
+        status = "AVAILABLE"
+        temperature = 20.0 + i
+        error_codes = []
+        if i == 0:
+            status = "FAULTY"
+        elif i == 1:
+            temperature = 55.0
+        elif i == 2:
+            error_codes = ["E1"]
+
         records.append(
             {
-                "connector_status": "AVAILABLE",
+                "connector_status": status,
                 "energy_delivered": 5.0 + i,
                 "power": 2.0 + (i % 3),
-                "temperature": 20.0 + i,
-                "error_codes": [],
+                "temperature": temperature,
+                "error_codes": error_codes,
             }
         )
     pd.DataFrame(records).to_csv(data_dir / "synthetic_charger_metrics.csv", index=False)
@@ -65,6 +78,15 @@ def _small_rf(*args, **kwargs):
 def _small_if(*args, **kwargs):
     kwargs["n_estimators"] = 10
     return SkIsolationForest(**kwargs)
+
+
+def _small_gb(*args, **kwargs):
+    kwargs["n_estimators"] = 10
+    return SkGradientBoostingClassifier(**kwargs)
+
+
+def _clear_module(name: str) -> None:
+    sys.modules.pop(name, None)
 
 
 def test_train_failure_model_main(tmp_path, monkeypatch):
@@ -115,3 +137,51 @@ def test_train_maintenance_model_main_missing_dataset(tmp_path, monkeypatch):
     _patch_path(monkeypatch, train_maintenance_model, tmp_path)
     with pytest.raises(SystemExit):
         train_maintenance_model.main()
+
+
+@pytest.mark.slow
+def test_train_failure_model_module_main(tmp_path, monkeypatch):
+    _write_training_dataset(tmp_path, rows=12)
+    monkeypatch.chdir(tmp_path)
+    repo_root = RealPath(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(repo_root))
+
+    import sklearn.ensemble as sk_ensemble
+
+    monkeypatch.setattr(sk_ensemble, "GradientBoostingClassifier", _small_gb)
+    _clear_module("src.ml.training.train_failure_model")
+    runpy.run_module("src.ml.training.train_failure_model", run_name="__main__")
+
+    assert (tmp_path / "models/failure_model.joblib").exists()
+
+
+@pytest.mark.slow
+def test_train_anomaly_model_module_main(tmp_path, monkeypatch):
+    _write_anomaly_dataset(tmp_path, rows=20)
+    monkeypatch.chdir(tmp_path)
+    repo_root = RealPath(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(repo_root))
+
+    import sklearn.ensemble as sk_ensemble
+
+    monkeypatch.setattr(sk_ensemble, "IsolationForest", _small_if)
+    _clear_module("src.ml.training.train_anomaly_model")
+    runpy.run_module("src.ml.training.train_anomaly_model", run_name="__main__")
+
+    assert (tmp_path / "models/anomaly_model.joblib").exists()
+
+
+@pytest.mark.slow
+def test_train_maintenance_model_module_main(tmp_path, monkeypatch):
+    _write_training_dataset(tmp_path, rows=12)
+    monkeypatch.chdir(tmp_path)
+    repo_root = RealPath(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(repo_root))
+
+    import sklearn.ensemble as sk_ensemble
+
+    monkeypatch.setattr(sk_ensemble, "RandomForestClassifier", _small_rf)
+    _clear_module("src.ml.training.train_maintenance_model")
+    runpy.run_module("src.ml.training.train_maintenance_model", run_name="__main__")
+
+    assert (tmp_path / "models/maintenance_model.joblib").exists()

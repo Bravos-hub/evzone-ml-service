@@ -22,6 +22,11 @@ class DummyProducer:
         self.published.append((topic, payload))
 
 
+class FailingProducer(DummyProducer):
+    async def start(self):
+        raise RuntimeError("boom")
+
+
 class DummyDataCollector:
     def __init__(self):
         self.calls = []
@@ -145,6 +150,19 @@ async def test_consumer_start_subscribes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_consumer_start_error(monkeypatch):
+    dummy_producer = FailingProducer()
+    data_collector = DummyDataCollector()
+    prediction_service = DummyPredictionService()
+
+    monkeypatch.setattr("src.kafka.consumer.Consumer", DummyConsumer)
+
+    consumer = KafkaConsumer(data_collector, prediction_service, producer=dummy_producer)
+    with pytest.raises(RuntimeError):
+        await consumer.start()
+
+
+@pytest.mark.asyncio
 async def test_process_message_missing_charger_id(monkeypatch):
     monkeypatch.setattr(settings, "enable_predictions", True)
     producer = DummyProducer()
@@ -159,6 +177,16 @@ async def test_process_message_missing_charger_id(monkeypatch):
     assert data_collector.calls == []
     assert prediction_service.calls == []
     assert producer.published == []
+
+
+@pytest.mark.asyncio
+async def test_process_message_exception_branch(monkeypatch):
+    producer = DummyProducer()
+    data_collector = DummyDataCollector()
+    prediction_service = DummyPredictionService()
+
+    consumer = KafkaConsumer(data_collector, prediction_service, producer=producer)
+    await consumer._process_message("not-json")
 
 
 @pytest.mark.asyncio
@@ -329,3 +357,24 @@ async def test_consume_loop_none_message(monkeypatch):
     await consumer._consume_loop()
 
     assert called["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_consume_loop_poll_exception(monkeypatch):
+    producer = DummyProducer()
+    data_collector = DummyDataCollector()
+    prediction_service = DummyPredictionService()
+    consumer = KafkaConsumer(data_collector, prediction_service, producer=producer)
+
+    class ExplodingConsumer:
+        def __init__(self, owner):
+            self.owner = owner
+
+        def poll(self, timeout=1.0):
+            self.owner.running = False
+            raise RuntimeError("boom")
+
+    consumer.consumer = ExplodingConsumer(consumer)
+    consumer.running = True
+
+    await consumer._consume_loop()

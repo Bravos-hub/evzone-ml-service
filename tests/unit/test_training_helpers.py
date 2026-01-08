@@ -14,6 +14,7 @@ def test_parse_error_codes_failure_model():
     assert train_failure_model.parse_error_codes(None) == []
     assert train_failure_model.parse_error_codes([]) == []
     assert train_failure_model.parse_error_codes("[]") == []
+    assert train_failure_model.parse_error_codes("  ") == []
     assert train_failure_model.parse_error_codes('["E1", "E2"]') == ["E1", "E2"]
     assert train_failure_model.parse_error_codes("not-a-list") == []
 
@@ -43,17 +44,29 @@ def test_build_features_failure_model():
                 "last_maintenance": "2025-10-01T00:00:00Z",
                 "failure_within_30d_label": 1,
             },
+            {
+                "connector_status": "AVAILABLE",
+                "energy_delivered": 30.0,
+                "power": 4.0,
+                "temperature": 30.0,
+                "error_codes": [],
+                "uptime_hours": 300.0,
+                "total_sessions": 30,
+                "last_maintenance": "bad-date",
+                "failure_within_30d_label": 0,
+            },
         ]
     )
     X, y = train_failure_model.build_features(df)
-    assert X.shape == (2, len(FEATURE_ORDER))
-    assert y.tolist() == [0, 1]
+    assert X.shape == (3, len(FEATURE_ORDER))
+    assert y.tolist() == [0, 1, 0]
 
 
 def test_parse_error_codes_anomaly_model():
     assert train_anomaly_model.parse_error_codes(None) == []
     assert train_anomaly_model.parse_error_codes(["E1"]) == ["E1"]
     assert train_anomaly_model.parse_error_codes('["E1"]') == ["E1"]
+    assert train_anomaly_model.parse_error_codes("  ") == []
     assert train_anomaly_model.parse_error_codes("bad") == []
 
 
@@ -77,6 +90,7 @@ def test_parse_error_codes_maintenance_model():
     assert train_maintenance_model.parse_error_codes(None) == []
     assert train_maintenance_model.parse_error_codes(["E2"]) == ["E2"]
     assert train_maintenance_model.parse_error_codes('["E2"]') == ["E2"]
+    assert train_maintenance_model.parse_error_codes("  ") == []
     assert train_maintenance_model.parse_error_codes("bad") == []
 
 
@@ -84,7 +98,16 @@ def test_maintenance_label_helpers():
     assert train_maintenance_model._coerce_label(2) == "HIGH"
     assert train_maintenance_model._coerce_label("low") == "LOW"
     assert train_maintenance_model._coerce_label(np.nan) is None
+    assert train_maintenance_model._coerce_label(99) is None
+    assert train_maintenance_model._coerce_label("unknown") is None
     assert train_maintenance_model._pick_label_column(pd.DataFrame({"urgency": ["LOW"]})) == "urgency"
+
+
+def test_maintenance_derive_urgency_branches():
+    assert train_maintenance_model.derive_urgency(0.9, "available") == "CRITICAL"
+    assert train_maintenance_model.derive_urgency(0.7, "available") == "HIGH"
+    assert train_maintenance_model.derive_urgency(0.5, "available") == "MEDIUM"
+    assert train_maintenance_model.derive_urgency(0.1, "available") == "LOW"
 
 
 def test_failure_prob_from_row():
@@ -93,6 +116,15 @@ def test_failure_prob_from_row():
 
     row = pd.Series({"failure_within_30d_label": 1})
     assert train_maintenance_model._failure_prob_from_row(row) == 1.0
+
+    row = pd.Series({"failure_probability": "bad", "failure_prob": 0.25})
+    assert train_maintenance_model._failure_prob_from_row(row) == 0.25
+
+    row = pd.Series({"failure_within_30d_label": "bad"})
+    assert train_maintenance_model._failure_prob_from_row(row) == 0.0
+
+    row = pd.Series({"other": 1})
+    assert train_maintenance_model._failure_prob_from_row(row) == 0.0
 
 
 def test_build_features_and_labels_maintenance_model():
@@ -107,6 +139,25 @@ def test_build_features_and_labels_maintenance_model():
                 "uptime_hours": 100.0,
                 "total_sessions": 10,
                 "last_maintenance": "2026-01-01T00:00:00Z",
+                "failure_probability": 0.2,
+            }
+        ]
+    )
+    X, y = train_maintenance_model.build_features_and_labels(df)
+    assert X.shape == (1, len(FEATURE_ORDER) + 1)
+    assert y.tolist() == ["LOW"]
+
+    df = pd.DataFrame(
+        [
+            {
+                "connector_status": "AVAILABLE",
+                "energy_delivered": 10.0,
+                "power": 2.0,
+                "temperature": 25.0,
+                "error_codes": [],
+                "uptime_hours": 100.0,
+                "total_sessions": 10,
+                "last_maintenance": "bad-date",
                 "failure_probability": 0.2,
             }
         ]

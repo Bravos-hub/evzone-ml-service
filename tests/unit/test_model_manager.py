@@ -1,6 +1,9 @@
 """
 Unit tests for ModelManager.
 """
+import builtins
+from pathlib import Path
+
 import pytest
 
 from src.services.model_manager import ModelManager
@@ -42,7 +45,33 @@ async def test_model_manager_unload_reload():
 
 
 @pytest.mark.asyncio
+async def test_model_manager_load_existing_model():
+    manager = ModelManager()
+    loaded = await manager.load_model("failure_predictor")
+
+    assert loaded is True
+
+
+@pytest.mark.asyncio
 async def test_model_manager_load_unknown_raises():
     manager = ModelManager()
     with pytest.raises(ModelLoadError):
         await manager.load_model("unknown_model")
+
+
+def test_model_manager_initialize_failure(monkeypatch):
+    manager = ModelManager.__new__(ModelManager)
+    manager.models = {}
+    manager.model_base_path = Path("models")
+
+    original_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "src.ml.models":
+            raise ImportError("boom")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    manager._initialize_models()
+
+    assert manager.models == {}

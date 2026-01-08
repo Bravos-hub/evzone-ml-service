@@ -24,7 +24,7 @@ class CacheService:
     """Production-ready Redis cache with resilience and observability."""
     
     _instance: Optional['CacheService'] = None
-    _client: Optional[redis.Redis] = None
+    _client: Optional["redis.Redis"] = None
     _is_healthy: bool = False
     _cache_hits: int = 0
     _cache_misses: int = 0
