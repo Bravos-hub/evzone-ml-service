@@ -5,9 +5,11 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 import logging
 
+from src.config.settings import settings
 from src.services.model_manager import ModelManager
 from src.services.feature_extractor import FeatureExtractor
 from src.services.cache_service import CacheService
+from src.kafka.producer import KafkaProducer
 from src.utils.errors import PredictionError, ModelNotFoundError
 from src.utils.metrics import prediction_requests, prediction_duration
 
@@ -22,10 +24,12 @@ class PredictionService:
         model_manager: ModelManager,
         feature_extractor: FeatureExtractor,
         cache_service: CacheService,
+        kafka_producer: Optional[KafkaProducer] = None,
     ):
         self.model_manager = model_manager
         self.feature_extractor = feature_extractor
         self.cache_service = cache_service
+        self.kafka_producer = kafka_producer or KafkaProducer.get_instance()
     
     async def predict_failure(
         self,
@@ -66,6 +70,11 @@ class PredictionService:
             
             prediction_requests.labels(model_type="failure_predictor", status="success").inc()
             
+            # Notify if high failure probability
+            if result.get("failure_probability", 0.0) >= 0.8:
+                await self.kafka_producer.publish(settings.kafka_topic_failure_alerts, result)
+                logger.info(f"Published failure alert for charger {charger_id}")
+
             return result
             
         except Exception as e:
@@ -112,6 +121,16 @@ class PredictionService:
             
             prediction_requests.labels(model_type="maintenance_scheduler", status="success").inc()
             
+            # Notify if critical urgency
+            if result.get("urgency") == "CRITICAL":
+                # We can reuse the failure alerts topic or use a generic alert topic
+                # Using failure alerts for now as it's critical maintenance
+                await self.kafka_producer.publish(settings.kafka_topic_failure_alerts, {
+                    "type": "MAINTENANCE_CRITICAL",
+                    **result
+                })
+                logger.info(f"Published critical maintenance alert for charger {charger_id}")
+
             return result
             
         except Exception as e:

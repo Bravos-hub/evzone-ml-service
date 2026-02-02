@@ -4,21 +4,32 @@ Kafka producer for sending predictions.
 import json
 import logging
 from confluent_kafka import Producer
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from src.config.settings import settings
 from src.kafka.topics import PREDICTIONS_TOPIC
 
 logger = logging.getLogger(__name__)
 
-
 class KafkaProducer:
     """Kafka producer for publishing predictions."""
     
+    _instance: Optional['KafkaProducer'] = None
+
     def __init__(self):
-        self.producer: Producer = None
+        self.producer = None
+
+    @classmethod
+    def get_instance(cls) -> 'KafkaProducer':
+        """Get the singleton instance."""
+        if cls._instance is None:
+            cls._instance = KafkaProducer()
+        return cls._instance
     
     async def start(self):
         """Initialize Kafka producer."""
+        if self.producer:
+            return
+
         try:
             self.producer = Producer({
                 'bootstrap.servers': settings.kafka_brokers,
@@ -27,6 +38,7 @@ class KafkaProducer:
             logger.info("Kafka producer initialized")
         except Exception as e:
             logger.error(f"Failed to initialize Kafka producer: {e}")
+            self.producer = None
             raise
     
     async def publish_prediction(self, prediction: Dict[str, Any]):
@@ -47,7 +59,7 @@ class KafkaProducer:
             payload: Message payload
         """
         if not self.producer:
-            logger.warning("Producer not initialized, skipping publish")
+            logger.debug("Producer not initialized, skipping publish")
             return
         
         try:
@@ -78,5 +90,4 @@ class KafkaProducer:
         """Stop Kafka producer."""
         if self.producer:
             await self.flush()
-            # Producer doesn't have explicit close, just flush
         logger.info("Kafka producer stopped")
