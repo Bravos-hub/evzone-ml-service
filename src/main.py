@@ -16,6 +16,7 @@ from src.services.feature_extractor import FeatureExtractor
 from src.services.model_manager import ModelManager
 from src.services.prediction_service import PredictionService
 from src.kafka.consumer import KafkaConsumer
+from src.kafka.producer import KafkaProducer
 
 # Setup logging
 logger = setup_logging()
@@ -31,6 +32,9 @@ async def lifespan(app: FastAPI):
     # Initialize Redis cache
     from src.services.cache_service import CacheService
     await CacheService.initialize()
+
+    # Initialize Kafka Producer
+    await KafkaProducer.get_instance().start()
 
     consumer_task = None
     kafka_consumer = None
@@ -53,6 +57,8 @@ async def lifespan(app: FastAPI):
         consumer_task.cancel()
         with suppress(asyncio.CancelledError):
             await consumer_task
+
+    await KafkaProducer.get_instance().stop()
     await CacheService.close()
 
 
