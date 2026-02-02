@@ -30,10 +30,12 @@ class ModelManager:
             failure_model_path = self.model_base_path / f"{settings.model_failure_predictor}.joblib"
             anomaly_model_path = self.model_base_path / f"{settings.model_anomaly_detector}.joblib"
 
+            maintenance_model_path = self.model_base_path / f"{settings.model_maintenance_optimizer}.joblib"
+
             # Instantiate models with their paths
             self.models["failure_predictor"] = FailurePredictor(model_path=failure_model_path)
             self.models["anomaly_detector"] = AnomalyDetector(model_path=anomaly_model_path)
-            self.models["maintenance_optimizer"] = MaintenanceOptimizer()
+            self.models["maintenance_optimizer"] = MaintenanceOptimizer(model_path=maintenance_model_path)
             
             logger.info("ML models initialized successfully")
             active_models.set(len(self.models))
