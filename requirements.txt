@@ -16,7 +16,7 @@ tensorflow==2.16.1; python_version<"3.13"
 # torch>=2.1.0
 # torchvision>=0.16.0
 # numpy 1.24.3 works with Python 3.11 (has wheels, no build needed)
-numpy==1.24.3
+numpy==1.26.4
 pandas==2.1.3
 scikit-learn==1.3.2
 joblib==1.3.2
