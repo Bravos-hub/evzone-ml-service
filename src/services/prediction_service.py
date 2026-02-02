@@ -137,3 +137,46 @@ class PredictionService:
             logger.error(f"Maintenance prediction failed for charger {charger_id}: {e}")
             prediction_requests.labels(model_type="maintenance_scheduler", status="error").inc()
             raise PredictionError(f"Failed to predict maintenance: {str(e)}")
+
+    async def detect_anomaly(
+        self,
+        charger_id: str,
+        metrics: Dict[str, Any],
+        tenant_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Detect anomalies in real-time charger metrics.
+
+        Args:
+            charger_id: Charger identifier
+            metrics: Charger metrics dictionary
+            tenant_id: Optional tenant identifier
+
+        Returns:
+            Anomaly detection result
+        """
+        try:
+            # Load anomaly detector
+            detector = await self.model_manager.get_model("anomaly_detector")
+            if not detector:
+                raise ModelNotFoundError("Anomaly detector model not loaded")
+
+            # Detect anomaly
+            result = detector.detect(metrics, tenant_id=tenant_id)
+            result["timestamp"] = datetime.utcnow().isoformat()
+            if tenant_id:
+                result["tenant_id"] = tenant_id
+
+            prediction_requests.labels(model_type="anomaly_detector", status="success").inc()
+
+            # If an anomaly is detected, publish to Kafka
+            if result.get("is_anomaly"):
+                await self.kafka_producer.publish(settings.kafka_topic_anomalies, result)
+                logger.info(f"Published anomaly detection alert for charger {charger_id}")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Anomaly detection failed for charger {charger_id}: {e}")
+            prediction_requests.labels(model_type="anomaly_detector", status="error").inc()
+            raise PredictionError(f"Failed to detect anomaly: {str(e)}")

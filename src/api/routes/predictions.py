@@ -443,23 +443,25 @@ async def detect_anomaly(
     """
     try:
         from src.services.model_manager import ModelManager
+        from src.services.cache_service import CacheService
+        from src.services.feature_extractor import FeatureExtractor
+        from src.services.prediction_service import PredictionService
 
-        # Initialize model manager
+        # Initialize services
         model_manager = ModelManager()
-
-        # Get anomaly detector
-        detector = await model_manager.get_model("anomaly_detector")
-        if not detector:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Anomaly detector not available"
-            )
+        cache_service = CacheService()
+        feature_extractor = FeatureExtractor()
+        prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
 
         # Convert Pydantic model to dict
         metrics_dict = request.metrics.model_dump()
 
-        # Detect anomalies
-        result = detector.detect(metrics_dict, tenant_id=tenant_id)
+        # Detect anomalies using the prediction service
+        result = await prediction_service.detect_anomaly(
+            request.charger_id,
+            metrics_dict,
+            tenant_id=tenant_id,
+        )
 
         return _build_anomaly_response(result, tenant_id)
     except HTTPException:

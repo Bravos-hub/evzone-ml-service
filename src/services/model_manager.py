@@ -21,13 +21,26 @@ class ModelManager:
     def _initialize_models(self):
         """Initialize ML model instances."""
         try:
-            from src.ml.models import FailurePredictor, AnomalyDetector, MaintenanceOptimizer
-            
-            self.models["failure_predictor"] = FailurePredictor()
-            self.models["anomaly_detector"] = AnomalyDetector()
+            # Correctly import model classes
+            from src.ml.models.failure_predictor import FailurePredictor
+            from src.ml.models.anomaly_detector import AnomalyDetector
+            from src.ml.models.maintenance_optimizer import MaintenanceOptimizer
+
+            # Construct model paths
+            failure_model_path = self.model_base_path / f"{settings.model_failure_predictor}.joblib"
+            anomaly_model_path = self.model_base_path / f"{settings.model_anomaly_detector}.joblib"
+
+            # Instantiate models with their paths
+            self.models["failure_predictor"] = FailurePredictor(model_path=str(failure_model_path))
+            self.models["anomaly_detector"] = AnomalyDetector(model_path=str(anomaly_model_path))
             self.models["maintenance_optimizer"] = MaintenanceOptimizer()
             
             logger.info("ML models initialized successfully")
+            active_models.set(len(self.models))
+        except ImportError as e:
+            logger.error(f"Failed to import model class: {e}")
+            # This is a critical error, so we should probably exit or handle it gracefully
+            raise ModelLoadError(f"Failed to import a model class: {e}") from e
         except Exception as e:
             logger.error(f"Failed to initialize models: {e}")
     

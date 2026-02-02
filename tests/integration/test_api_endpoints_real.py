@@ -3,6 +3,7 @@ Integration tests for API endpoints using real models and cache paths.
 """
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from src.config.settings import settings
 from src.main import app

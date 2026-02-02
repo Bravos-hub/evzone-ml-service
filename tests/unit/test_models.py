@@ -5,15 +5,15 @@ import builtins
 import runpy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Dict, Any, Optional
 
 import joblib
 import numpy as np
 import pytest
 
-from src.ml.models import FailurePredictor, AnomalyDetector, MaintenanceOptimizer
-from src.ml.models import failure_predictor as failure_module
-from src.ml.models import anomaly_detector as anomaly_module
-from src.ml.models import maintenance_optimizer as maintenance_module
+from src.ml.models.failure_predictor import FailurePredictor
+from src.ml.models.anomaly_detector import AnomalyDetector
+from src.ml.models.maintenance_optimizer import MaintenanceOptimizer
 from src.ml.preprocessing.feature_engineering import FEATURE_ORDER
 
 
@@ -24,6 +24,9 @@ class DummyFailureModel:
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         return np.array([[1.0 - self.proba, self.proba] for _ in range(len(X))], dtype=float)
 
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        return np.array([self.proba for _ in range(len(X))], dtype=float)
+
 
 class DummyAnomalyModel:
     def __init__(self, normality: float = -2.0) -> None:
@@ -32,6 +35,14 @@ class DummyAnomalyModel:
     def score_samples(self, X: np.ndarray) -> np.ndarray:
         return np.array([self.normality for _ in range(len(X))], dtype=float)
 
+    def detect(self, metrics: Dict[str, Any], tenant_id: Optional[str] = None) -> Dict[str, Any]:
+        return {
+            "is_anomaly": False,
+            "anomaly_score": 50.0,
+            "anomaly_type": "NORMAL",
+            "deviation": {}
+        }
+
 
 class DummyMaintenanceModel:
     def __init__(self, label: str = "HIGH") -> None:
@@ -39,6 +50,13 @@ class DummyMaintenanceModel:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return np.array([self.label for _ in range(len(X))], dtype=object)
+
+    def recommend(self, metrics: Dict[str, Any], failure_pred: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "urgency": self.label,
+            "recommended_maintenance_datetime": datetime.now(timezone.utc) + timedelta(days=1),
+            "estimated_downtime_hours": 2.0
+        }
 
 
 class DummyNoScoreModel:
