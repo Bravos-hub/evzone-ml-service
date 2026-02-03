@@ -13,10 +13,19 @@ logger = logging.getLogger(__name__)
 class ModelManager:
     """Manages ML model loading, versioning, and lifecycle."""
     
+    _instance: Optional['ModelManager'] = None
+
     def __init__(self):
         self.models: Dict[str, Any] = {}
         self.model_base_path = Path(settings.model_base_path)
         self._initialize_models()
+
+    @classmethod
+    def get_instance(cls) -> 'ModelManager':
+        """Get the singleton instance."""
+        if cls._instance is None:
+            cls._instance = ModelManager()
+        return cls._instance
     
     def _initialize_models(self):
         """Initialize ML model instances."""

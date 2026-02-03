@@ -51,7 +51,7 @@ async def list_models(
     try:
         from src.services.model_manager import ModelManager
         
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         loaded_models = await model_manager.list_models()
         
         models = []
@@ -91,7 +91,7 @@ async def reload_models(
     try:
         from src.services.model_manager import ModelManager
 
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         model_name = model_name or "all"
 
         if model_name == "all":
