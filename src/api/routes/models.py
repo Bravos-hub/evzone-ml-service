@@ -89,14 +89,25 @@ async def reload_models(
     Reloads all models or a specific model if model_name is provided.
     """
     try:
-        # TODO: Implement model reloading from model_manager
+        from src.services.model_manager import ModelManager
+
+        model_manager = ModelManager()
         model_name = model_name or "all"
+
+        if model_name == "all":
+            loaded_models = await model_manager.list_models()
+            for name in loaded_models:
+                await model_manager.reload_model(name)
+            message = "All models reloaded successfully"
+        else:
+            await model_manager.reload_model(model_name)
+            message = f"Model {model_name} reloaded successfully"
         
         return ReloadModelResponse(
             success=True,
             model_name=model_name,
             version="v1.0.0",
-            message=f"Model {model_name} reloaded successfully",
+            message=message,
             timestamp=datetime.utcnow(),
         )
     except Exception as e:
