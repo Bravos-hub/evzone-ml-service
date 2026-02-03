@@ -62,7 +62,13 @@ def test_lifespan_with_kafka_consumer(monkeypatch):
 
     monkeypatch.setattr(main, "KafkaConsumer", DummyKafkaConsumer)
     monkeypatch.setattr("src.services.cache_service.CacheService", DummyCacheService)
-    monkeypatch.setattr(main, "ModelManager", lambda: object())
+
+    class DummyModelManager:
+        @classmethod
+        def get_instance(cls):
+            return object()
+
+    monkeypatch.setattr(main, "ModelManager", DummyModelManager)
     monkeypatch.setattr(main, "FeatureExtractor", lambda: object())
     monkeypatch.setattr(main, "PredictionService", lambda *args, **kwargs: object())
     monkeypatch.setattr(main, "DataCollector", lambda: object())

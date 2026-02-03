@@ -179,3 +179,72 @@ async def test_predict_maintenance_invalid_failure_date():
     result = await service.predict_maintenance("c1", {"charger_id": "c1"}, tenant_id="t1")
 
     assert result["charger_id"] == "c1"
+
+
+@pytest.mark.asyncio
+async def test_predict_failure_high_probability_publishes_alert():
+    cache = DummyCacheService()
+    failure_model = DummyFailureModel({"charger_id": "c1", "failure_probability": 0.95})
+    model_manager = DummyModelManager(failure_model=failure_model)
+
+    from unittest.mock import AsyncMock
+    kafka_mock = AsyncMock()
+
+    service = PredictionService(model_manager, object(), cache, kafka_producer=kafka_mock)
+    await service.predict_failure("c1", {"charger_id": "c1"})
+
+    assert kafka_mock.publish.called
+
+
+@pytest.mark.asyncio
+async def test_detect_anomaly_success():
+    class DummyAnomalyModel:
+        def detect(self, metrics, tenant_id=None):
+            return {"is_anomaly": True, "anomaly_score": 90.0}
+
+    cache = DummyCacheService()
+    anomaly_model = DummyAnomalyModel()
+    model_manager = DummyModelManager()
+
+    async def get_model_patch(model_name):
+        if model_name == "anomaly_detector":
+            return anomaly_model
+        return None
+
+    model_manager.get_model = get_model_patch
+
+    from unittest.mock import AsyncMock
+    kafka_mock = AsyncMock()
+
+    service = PredictionService(model_manager, object(), cache, kafka_producer=kafka_mock)
+    result = await service.detect_anomaly("c1", {"charger_id": "c1"})
+
+    assert result["is_anomaly"] is True
+    assert kafka_mock.publish.called
+
+
+@pytest.mark.asyncio
+async def test_predict_failure_handles_model_not_found():
+    cache = DummyCacheService()
+    model_manager = DummyModelManager(failure_model=None)
+
+    service = PredictionService(model_manager, object(), cache)
+    with pytest.raises(PredictionError) as exc:
+        await service.predict_failure("c1", {"charger_id": "c1"})
+    assert "Failure predictor model not loaded" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_predict_maintenance_handles_failure_prediction_error():
+    cache = DummyCacheService()
+    model_manager = DummyModelManager()
+
+    service = PredictionService(model_manager, object(), cache)
+
+    async def failing_predict_failure(*args, **kwargs):
+        raise Exception("Failure prediction failed")
+
+    service.predict_failure = failing_predict_failure
+
+    with pytest.raises(PredictionError):
+        await service.predict_maintenance("c1", {"charger_id": "c1"})
