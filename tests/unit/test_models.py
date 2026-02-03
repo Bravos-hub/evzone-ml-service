@@ -11,8 +11,11 @@ import joblib
 import numpy as np
 import pytest
 
+import src.ml.models.failure_predictor as failure_module
 from src.ml.models.failure_predictor import FailurePredictor
+import src.ml.models.anomaly_detector as anomaly_module
 from src.ml.models.anomaly_detector import AnomalyDetector
+import src.ml.models.maintenance_optimizer as maintenance_module
 from src.ml.models.maintenance_optimizer import MaintenanceOptimizer
 from src.ml.preprocessing.feature_engineering import FEATURE_ORDER
 

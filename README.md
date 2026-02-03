@@ -574,11 +574,20 @@ python3 test_integration.py
 
 ### Run Unit Tests
 ```bash
+# Run all unit tests
 pytest tests/unit/ -v
+
+# Run specific test modules
+pytest tests/unit/test_api_predictions.py
+pytest tests/unit/test_prediction_service.py
 ```
 
 ### Run with Coverage
 ```bash
+# Run with coverage report in terminal
+pytest --cov=src --cov-report=term-missing
+
+# Generate HTML coverage report
 pytest --cov=src --cov-report=html
 open htmlcov/index.html
 ```

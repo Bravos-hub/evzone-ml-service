@@ -67,11 +67,13 @@ def test_model_manager_initialize_failure(monkeypatch):
     original_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
-        if name == "src.ml.models":
+        if "src.ml.models" in name:
             raise ImportError("boom")
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    manager._initialize_models()
+
+    with pytest.raises(ModelLoadError):
+        manager._initialize_models()
 
     assert manager.models == {}

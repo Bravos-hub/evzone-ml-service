@@ -39,7 +39,7 @@ class ModelManager:
             failure_model_path = self.model_base_path / f"{settings.model_failure_predictor}.joblib"
             anomaly_model_path = self.model_base_path / f"{settings.model_anomaly_detector}.joblib"
 
-            maintenance_model_path = self.model_base_path / f"{settings.model_maintenance_optimizer}.joblib"
+            maintenance_model_path = self.model_base_path / f"{settings.model_maintenance_scheduler}.joblib"
 
             # Instantiate models with their paths
             self.models["failure_predictor"] = FailurePredictor(model_path=failure_model_path)
@@ -47,13 +47,15 @@ class ModelManager:
             self.models["maintenance_optimizer"] = MaintenanceOptimizer(model_path=maintenance_model_path)
             
             logger.info("ML models initialized successfully")
-            active_models.set(len(self.models))
+            for model_name in self.models:
+                active_models.labels(model_type=model_name).set(1)
         except ImportError as e:
             logger.error(f"Failed to import model class: {e}")
             # This is a critical error, so we should probably exit or handle it gracefully
             raise ModelLoadError(f"Failed to import a model class: {e}") from e
         except Exception as e:
             logger.error(f"Failed to initialize models: {e}")
+            raise ModelLoadError(f"Failed to initialize models: {e}") from e
     
     async def load_model(self, model_name: str, version: str = "latest") -> bool:
         """
