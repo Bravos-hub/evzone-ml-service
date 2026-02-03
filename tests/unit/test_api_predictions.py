@@ -10,7 +10,7 @@ def test_predict_failure_success(client, auth_headers):
         "charger_id": "test-charger",
         "failure_probability": 0.1,
         "confidence": 0.9,
-        "recommended_action_window": "WITHIN_30_DAYS",
+        "recommended_action": "WITHIN_30_DAYS",
         "recommendations": ["Check cable"],
         "predicted_failure_date": datetime.now(timezone.utc).isoformat(),
         "model_version": "v1.0.0",
@@ -123,14 +123,16 @@ def test_detect_anomaly_success(client, auth_headers):
     assert data["anomaly_type"] == "OVER_TEMPERATURE"
 
 def test_batch_predictions_success(client, auth_headers):
-    payload = {
-        "chargers": [
-            {"charger_id": "CHG_001", "connector_status": "AVAILABLE"},
-            {"charger_id": "CHG_002", "connector_status": "CHARGING"}
-        ]
-    }
+    # Current implementation is a stub, but we mock the service for future-proofing
+    with patch("src.services.prediction_service.PredictionService") as mock_service:
+        payload = {
+            "chargers": [
+                {"charger_id": "CHG_001", "connector_status": "AVAILABLE"},
+                {"charger_id": "CHG_002", "connector_status": "CHARGING"}
+            ]
+        }
 
-    response = client.post("/api/v1/predictions/batch", json=payload, headers=auth_headers)
+        response = client.post("/api/v1/predictions/batch", json=payload, headers=auth_headers)
 
     assert response.status_code == 200
     data = response.json()
