@@ -9,6 +9,13 @@ from src.kafka.producer import KafkaProducer
 from src.config.settings import settings
 
 
+@pytest.fixture(autouse=True)
+def reset_singleton():
+    KafkaProducer._instance = None
+    yield
+    KafkaProducer._instance = None
+
+
 class DummyMsg:
     def __init__(self, topic):
         self._topic = topic
