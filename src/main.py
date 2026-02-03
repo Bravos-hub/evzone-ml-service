@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     consumer_task = None
     kafka_consumer = None
     if settings.enable_kafka_consumer:
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         cache_service = CacheService()
         feature_extractor = FeatureExtractor()
         prediction_service = PredictionService(model_manager, feature_extractor, cache_service)

@@ -286,7 +286,7 @@ async def predict_failure(
         from src.services.prediction_service import PredictionService
 
         # Initialize services (in production, use dependency injection)
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         cache_service = CacheService()
         feature_extractor = FeatureExtractor()
         prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
@@ -327,7 +327,7 @@ async def predict_maintenance(
         from src.services.prediction_service import PredictionService
 
         # Initialize services
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         cache_service = CacheService()
         feature_extractor = FeatureExtractor()
         prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
@@ -448,7 +448,7 @@ async def detect_anomaly(
         from src.services.prediction_service import PredictionService
 
         # Initialize services
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         cache_service = CacheService()
         feature_extractor = FeatureExtractor()
         prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
@@ -483,7 +483,7 @@ async def detect_anomaly_flat(
     try:
         from src.services.model_manager import ModelManager
 
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         detector = await model_manager.get_model("anomaly_detector")
         if not detector:
             raise HTTPException(
@@ -528,7 +528,7 @@ async def recommend_maintenance(
         from src.services.feature_extractor import FeatureExtractor
         from src.services.prediction_service import PredictionService
 
-        model_manager = ModelManager()
+        model_manager = ModelManager.get_instance()
         cache_service = CacheService()
         feature_extractor = FeatureExtractor()
         prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
