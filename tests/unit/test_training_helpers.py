@@ -169,9 +169,29 @@ def test_build_features_and_labels_maintenance_model():
 
 def test_evaluate_model_returns_metrics():
     from src.ml.training import model_evaluator
+    from sklearn.dummy import DummyClassifier
 
-    metrics = model_evaluator.evaluate_model(None, None, None)
-    assert metrics["accuracy"] == 0.92
-    assert metrics["precision"] == 0.89
-    assert metrics["recall"] == 0.91
-    assert metrics["f1_score"] == 0.90
+    # Create dummy data
+    X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])
+    y = np.array([0, 1, 0, 1])
+
+    # Train a dummy model that always predicts the most frequent class (0)
+    model = DummyClassifier(strategy="constant", constant=0)
+    model.fit(X, y)
+
+    metrics = model_evaluator.evaluate_model(model, X, y)
+
+    assert "accuracy" in metrics
+    assert "precision" in metrics
+    assert "recall" in metrics
+    assert "f1_score" in metrics
+
+    # Accuracy: 2 correct out of 4 = 0.5
+    assert metrics["accuracy"] == 0.5
+    # For weighted average with y=[0, 1, 0, 1] and y_pred=[0, 0, 0, 0]
+    # class 0: precision=0.5, recall=1.0, support=2
+    # class 1: precision=0.0, recall=0.0, support=2
+    # weighted precision: (0.5*2 + 0*2)/4 = 0.25
+    # weighted recall: (1.0*2 + 0*2)/4 = 0.5
+    assert metrics["precision"] == 0.25
+    assert metrics["recall"] == 0.5
