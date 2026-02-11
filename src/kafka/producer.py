@@ -15,8 +15,14 @@ class KafkaProducer:
     
     _instance: Optional['KafkaProducer'] = None
 
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(KafkaProducer, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.producer = None
+        if not hasattr(self, "producer"):
+            self.producer = None
 
     @classmethod
     def get_instance(cls) -> 'KafkaProducer':
