@@ -1,6 +1,7 @@
 """
 Kafka consumer for charger metrics.
 """
+import asyncio
 import json
 import logging
 from confluent_kafka import Consumer, KafkaError
@@ -55,7 +56,7 @@ class KafkaConsumer:
         """Main consumption loop."""
         while self.running:
             try:
-                msg = self.consumer.poll(timeout=1.0)
+                msg = await asyncio.to_thread(self.consumer.poll, timeout=1.0)
                 
                 if msg is None:
                     continue
