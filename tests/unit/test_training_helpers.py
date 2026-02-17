@@ -169,9 +169,30 @@ def test_build_features_and_labels_maintenance_model():
 
 def test_evaluate_model_returns_metrics():
     from src.ml.training import model_evaluator
+    from sklearn.ensemble import RandomForestClassifier
+    import numpy as np
 
-    metrics = model_evaluator.evaluate_model(None, None, None)
-    assert metrics["accuracy"] == 0.92
-    assert metrics["precision"] == 0.89
-    assert metrics["recall"] == 0.91
-    assert metrics["f1_score"] == 0.90
+    # Create a simple dataset
+    X = np.array([[1, 2], [1, 2], [10, 20], [10, 20]])
+    y = np.array([0, 0, 1, 1])
+
+    # Train a simple model
+    model = RandomForestClassifier(n_estimators=10, random_state=42)
+    model.fit(X, y)
+
+    # Evaluate
+    metrics = model_evaluator.evaluate_model(model, X, y)
+
+    assert "accuracy" in metrics
+    assert "precision" in metrics
+    assert "recall" in metrics
+    assert "f1_score" in metrics
+
+    # For this simple dataset, it should be perfectly accurate
+    assert metrics["accuracy"] == 1.0
+    assert metrics["precision"] == 1.0
+    assert metrics["recall"] == 1.0
+    assert metrics["f1_score"] == 1.0
+
+    # Verify they are floats
+    assert isinstance(metrics["accuracy"], float)
