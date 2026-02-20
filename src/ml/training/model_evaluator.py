@@ -20,21 +20,21 @@ def evaluate_model(model, test_data, test_labels) -> Dict[str, Any]:
     Returns:
         Evaluation metrics dictionary
     """
-    logger.info("Evaluating model performance")
+    logger.info("Evaluating model performance...")
     
-    # Make predictions
-    predictions = model.predict(test_data)
+    # Generate predictions
+    y_pred = model.predict(test_data)
 
     # Calculate metrics
-    # Using average='weighted' and zero_division=0 to handle both binary and multiclass
-    # and avoid errors when a class has no samples or no predictions.
+    # Using 'weighted' average to handle both binary and multi-class classification
+    # as it accounts for label imbalance.
     metrics = {
-        "accuracy": float(accuracy_score(test_labels, predictions)),
-        "precision": float(precision_score(test_labels, predictions, average='weighted', zero_division=0)),
-        "recall": float(recall_score(test_labels, predictions, average='weighted', zero_division=0)),
-        "f1_score": float(f1_score(test_labels, predictions, average='weighted', zero_division=0)),
+        "accuracy": float(accuracy_score(test_labels, y_pred)),
+        "precision": float(precision_score(test_labels, y_pred, average='weighted', zero_division=0)),
+        "recall": float(recall_score(test_labels, y_pred, average='weighted', zero_division=0)),
+        "f1_score": float(f1_score(test_labels, y_pred, average='weighted', zero_division=0)),
     }
 
-    logger.info(f"Evaluation metrics: {metrics}")
+    logger.info(f"Evaluation results: {metrics}")
 
     return metrics
