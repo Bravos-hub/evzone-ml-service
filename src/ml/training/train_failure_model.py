@@ -2,6 +2,7 @@
 Training script for failure prediction model.
 """
 import ast
+from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
@@ -11,7 +12,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
-from src.ml.preprocessing.feature_engineering import FEATURE_ORDER, STATUS_TO_INT, days_since
+from src.ml.preprocessing.feature_engineering import FEATURE_ORDER, STATUS_TO_INT
 
 
 def parse_error_codes(val) -> list[str]:
@@ -30,40 +31,49 @@ def parse_error_codes(val) -> list[str]:
 
 
 def build_features(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    X_rows = []
-    y = df["failure_within_30d_label"].astype(int).values
+    # Extract labels
+    y = pd.to_numeric(df.get("failure_within_30d_label"), errors="coerce").fillna(0).astype(int).values
 
-    for _, r in df.iterrows():
-        status = str(r.get("connector_status", "AVAILABLE")).upper()
-        status_int = float(STATUS_TO_INT.get(status, 0))
-        error_codes = parse_error_codes(r.get("error_codes"))
-        error_count = float(len(error_codes))
+    # Vectorized connector_status to status_int
+    status_series = df.get("connector_status", pd.Series("AVAILABLE", index=df.index))
+    status_series = status_series.fillna("AVAILABLE").astype(str).str.upper()
+    status_int = status_series.map(STATUS_TO_INT).fillna(0).astype(float)
 
-        lm_raw = r.get("last_maintenance")
-        lm = None
-        if isinstance(lm_raw, str) and lm_raw:
-            try:
-                from datetime import datetime
+    # Vectorized error_codes to error_count
+    error_codes_col = df.get("error_codes", pd.Series("[]", index=df.index))
+    error_count = error_codes_col.apply(parse_error_codes).apply(len).astype(float)
 
-                lm = datetime.fromisoformat(lm_raw.replace("Z", "+00:00"))
-            except Exception:
-                lm = None
+    # Vectorized last_maintenance to days_since_maintenance
+    now = datetime.now(timezone.utc)
+    lm_col = df.get("last_maintenance")
+    if lm_col is not None:
+        lm_series = pd.to_datetime(lm_col, errors="coerce", utc=True)
+        days_since_maint = (now - lm_series).dt.total_seconds() / 86400.0
+        days_since_maint = days_since_maint.fillna(9999.0).clip(lower=0.0)
+    else:
+        days_since_maint = pd.Series(9999.0, index=df.index)
+    days_since_maint = days_since_maint.astype(float)
 
-        feats = {
-            "status_int": status_int,
-            "energy_delivered": float(r.get("energy_delivered", 0.0) or 0.0),
-            "power": float(r.get("power", 0.0) or 0.0),
-            "temperature": float(r.get("temperature", 0.0) or 0.0),
-            "error_count": error_count,
-            "uptime_hours": float(r.get("uptime_hours", 0.0) or 0.0),
-            "total_sessions": float(r.get("total_sessions", 0.0) or 0.0),
-            "days_since_maintenance": float(days_since(lm)),
-        }
+    # Helper for numeric columns with robustness to empty strings and missing keys
+    def safe_numeric(col_name):
+        series = df.get(col_name, pd.Series(0.0, index=df.index))
+        return pd.to_numeric(series, errors="coerce").fillna(0.0).astype(float)
 
-        X_rows.append([feats[k] for k in FEATURE_ORDER])
+    # Combine into feature matrix following FEATURE_ORDER
+    features_dict = {
+        "status_int": status_int,
+        "energy_delivered": safe_numeric("energy_delivered"),
+        "power": safe_numeric("power"),
+        "temperature": safe_numeric("temperature"),
+        "error_count": error_count,
+        "uptime_hours": safe_numeric("uptime_hours"),
+        "total_sessions": safe_numeric("total_sessions"),
+        "days_since_maintenance": days_since_maint,
+    }
 
-    X = np.array(X_rows, dtype=float)
-    y = np.array(y, dtype=int)
+    # Create the feature matrix X
+    X = np.column_stack([features_dict[k] for k in FEATURE_ORDER]).astype(float)
+
     return X, y
 
 
