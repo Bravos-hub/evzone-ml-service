@@ -30,40 +30,38 @@ def parse_error_codes(val) -> list[str]:
 
 
 def build_features(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    X_rows = []
+    from datetime import datetime, timezone
+
     y = df["failure_within_30d_label"].astype(int).values
 
-    for _, r in df.iterrows():
-        status = str(r.get("connector_status", "AVAILABLE")).upper()
-        status_int = float(STATUS_TO_INT.get(status, 0))
-        error_codes = parse_error_codes(r.get("error_codes"))
-        error_count = float(len(error_codes))
+    # Vectorized connector_status to status_int
+    status_series = df["connector_status"].fillna("AVAILABLE").astype(str).str.upper()
+    status_int = status_series.map(STATUS_TO_INT).fillna(0).astype(float)
 
-        lm_raw = r.get("last_maintenance")
-        lm = None
-        if isinstance(lm_raw, str) and lm_raw:
-            try:
-                from datetime import datetime
+    # Vectorized error_codes to error_count
+    error_count = df["error_codes"].apply(parse_error_codes).apply(len).astype(float)
 
-                lm = datetime.fromisoformat(lm_raw.replace("Z", "+00:00"))
-            except Exception:
-                lm = None
+    # Vectorized last_maintenance to days_since_maintenance
+    now = datetime.now(timezone.utc)
+    lm_series = pd.to_datetime(df["last_maintenance"], errors="coerce", utc=True)
+    days_since_maint = (now - lm_series).dt.total_seconds() / 86400.0
+    days_since_maint = days_since_maint.fillna(9999.0).clip(lower=0.0).astype(float)
 
-        feats = {
-            "status_int": status_int,
-            "energy_delivered": float(r.get("energy_delivered", 0.0) or 0.0),
-            "power": float(r.get("power", 0.0) or 0.0),
-            "temperature": float(r.get("temperature", 0.0) or 0.0),
-            "error_count": error_count,
-            "uptime_hours": float(r.get("uptime_hours", 0.0) or 0.0),
-            "total_sessions": float(r.get("total_sessions", 0.0) or 0.0),
-            "days_since_maintenance": float(days_since(lm)),
-        }
+    # Combine into feature matrix following FEATURE_ORDER
+    features_dict = {
+        "status_int": status_int,
+        "energy_delivered": df["energy_delivered"].fillna(0.0).astype(float),
+        "power": df["power"].fillna(0.0).astype(float),
+        "temperature": df["temperature"].fillna(0.0).astype(float),
+        "error_count": error_count,
+        "uptime_hours": df["uptime_hours"].fillna(0.0).astype(float),
+        "total_sessions": df["total_sessions"].fillna(0.0).astype(float),
+        "days_since_maintenance": days_since_maint,
+    }
 
-        X_rows.append([feats[k] for k in FEATURE_ORDER])
+    # Create the feature matrix X
+    X = np.column_stack([features_dict[k] for k in FEATURE_ORDER]).astype(float)
 
-    X = np.array(X_rows, dtype=float)
-    y = np.array(y, dtype=int)
     return X, y
 
 
