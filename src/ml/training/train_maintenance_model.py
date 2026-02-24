@@ -2,6 +2,7 @@
 Training script for maintenance scheduling model.
 """
 import ast
+from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
@@ -11,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
-from src.ml.preprocessing.feature_engineering import FEATURE_ORDER, STATUS_TO_INT, days_since
+from src.ml.preprocessing.feature_engineering import FEATURE_ORDER, STATUS_TO_INT
 
 LABEL_COLUMNS = [
     "maintenance_urgency_label",
@@ -85,48 +86,78 @@ def _failure_prob_from_row(r: pd.Series) -> float:
 
 
 def build_features_and_labels(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    X_rows = []
-    y_rows: list[str] = []
+    # 1. Vectorized status
+    status_series = df.get("connector_status", pd.Series("AVAILABLE", index=df.index))
+    status_series = status_series.fillna("AVAILABLE").astype(str).str.upper()
+    status_int = status_series.map(STATUS_TO_INT).fillna(0).astype(float)
 
+    # 2. Vectorized error codes
+    error_codes_col = df.get("error_codes", pd.Series("[]", index=df.index))
+    error_count = error_codes_col.apply(parse_error_codes).apply(len).astype(float)
+
+    # 3. Vectorized maintenance days
+    now = datetime.now(timezone.utc)
+    lm_col = df.get("last_maintenance")
+    if lm_col is not None:
+        lm_series = pd.to_datetime(lm_col, errors="coerce", utc=True)
+        days_since_maint = (now - lm_series).dt.total_seconds() / 86400.0
+        days_since_maint = days_since_maint.fillna(9999.0).clip(lower=0.0)
+    else:
+        days_since_maint = pd.Series(9999.0, index=df.index)
+
+    # 4. Helper for numeric
+    def safe_numeric(col_name):
+        series = df.get(col_name, pd.Series(0.0, index=df.index))
+        return pd.to_numeric(series, errors="coerce").fillna(0.0).astype(float)
+
+    # 5. Failure probability (vectorized logic from _failure_prob_from_row)
+    failure_prob = pd.Series(0.0, index=df.index)
+    for col in ["failure_probability_synth", "failure_probability", "failure_prob"]:
+        if col in df.columns:
+            col_vals = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+            failure_prob = failure_prob.where(failure_prob != 0.0, col_vals)
+
+    if "failure_within_30d_label" in df.columns:
+        label_vals = pd.to_numeric(df["failure_within_30d_label"], errors="coerce").fillna(0.0)
+        failure_prob = failure_prob.where(failure_prob != 0.0, label_vals)
+
+    # 6. Labels (vectorized logic from _coerce_label and derive_urgency)
     label_col = _pick_label_column(df)
+    if label_col:
+        y_series = df[label_col].apply(_coerce_label)
+    else:
+        y_series = pd.Series([None] * len(df), index=df.index)
 
-    for _, r in df.iterrows():
-        status = str(r.get("connector_status", "AVAILABLE")).upper()
-        error_codes = parse_error_codes(r.get("error_codes"))
+    # Fill missing labels with derived urgency
+    missing_mask = y_series.isna()
+    if missing_mask.any():
+        # derive_urgency logic
+        derived = pd.Series("LOW", index=df.index)
+        prob_m = failure_prob
+        derived.loc[prob_m >= 0.40] = "MEDIUM"
+        derived.loc[prob_m >= 0.60] = "HIGH"
+        critical_mask = (status_series.isin({"FAULTY", "OFFLINE", "UNAVAILABLE"})) | (
+            prob_m >= 0.85
+        )
+        derived.loc[critical_mask] = "CRITICAL"
+        y_series = y_series.fillna(derived)
 
-        lm_raw = r.get("last_maintenance")
-        lm = None
-        if isinstance(lm_raw, str) and lm_raw:
-            try:
-                from datetime import datetime
+    # 7. Combine features
+    features_dict = {
+        "status_int": status_int,
+        "energy_delivered": safe_numeric("energy_delivered"),
+        "power": safe_numeric("power"),
+        "temperature": safe_numeric("temperature"),
+        "error_count": error_count,
+        "uptime_hours": safe_numeric("uptime_hours"),
+        "total_sessions": safe_numeric("total_sessions"),
+        "days_since_maintenance": days_since_maint.astype(float),
+        "failure_probability": failure_prob.astype(float),
+    }
 
-                lm = datetime.fromisoformat(lm_raw.replace("Z", "+00:00"))
-            except Exception:
-                lm = None
+    X = np.column_stack([features_dict[k] for k in FEATURE_ORDER + ["failure_probability"]])
+    y = y_series.values
 
-        feats = {
-            "status_int": float(STATUS_TO_INT.get(status, 0)),
-            "energy_delivered": float(r.get("energy_delivered", 0.0) or 0.0),
-            "power": float(r.get("power", 0.0) or 0.0),
-            "temperature": float(r.get("temperature", 0.0) or 0.0),
-            "error_count": float(len(error_codes)),
-            "uptime_hours": float(r.get("uptime_hours", 0.0) or 0.0),
-            "total_sessions": float(r.get("total_sessions", 0.0) or 0.0),
-            "days_since_maintenance": float(days_since(lm)),
-        }
-
-        failure_prob = _failure_prob_from_row(r)
-        feats["failure_probability"] = float(failure_prob)
-
-        X_rows.append([feats[k] for k in FEATURE_ORDER + ["failure_probability"]])
-
-        label = _coerce_label(r.get(label_col)) if label_col else None
-        if label is None:
-            label = derive_urgency(failure_prob, status)
-        y_rows.append(label)
-
-    X = np.array(X_rows, dtype=float)
-    y = np.array(y_rows, dtype=object)
     return X, y
 
 
