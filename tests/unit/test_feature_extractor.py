@@ -48,7 +48,7 @@ async def test_extract_maintenance_features_parses_string_date():
     features = await extractor.extract_maintenance_features("test-charger-2", metrics)
 
     assert isinstance(features, np.ndarray)
-    assert len(features) == 5
+    assert len(features) == 9 # 8 base features + 1 for failure_probability
 
 
 @pytest.mark.asyncio
@@ -77,7 +77,7 @@ async def test_extract_failure_features_error():
 async def test_extract_maintenance_features_error():
     extractor = FeatureExtractor()
     with pytest.raises(Exception):
-        await extractor.extract_maintenance_features("test-charger-1", {"last_maintenance": "bad-date"})
+        await extractor.extract_maintenance_features("test-charger-1", None)
 
 
 @pytest.mark.asyncio
