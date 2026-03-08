@@ -1,6 +1,7 @@
 """
 Model management API endpoints.
 """
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
@@ -96,8 +97,7 @@ async def reload_models(
 
         if model_name == "all":
             loaded_models = await model_manager.list_models()
-            for name in loaded_models:
-                await model_manager.reload_model(name)
+            await asyncio.gather(*(model_manager.reload_model(name) for name in loaded_models))
             message = "All models reloaded successfully"
         else:
             await model_manager.reload_model(model_name)
