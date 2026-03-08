@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime, timedelta
 
 from src.utils.errors import FeatureExtractionError
+from src.ml.preprocessing.feature_engineering import extract_features, features_to_vector
 
 logger = logging.getLogger(__name__)
 
@@ -67,24 +68,23 @@ class FeatureExtractor:
             Feature vector as numpy array
         """
         try:
-            # TODO: Implement maintenance-specific feature engineering
+            # Base features from standard feature extraction
+            base_features = extract_features(metrics)
+            feature_list = features_to_vector(base_features)
+
+            # Derive failure probability, similar to training
+            failure_prob = 0.0
+            for col in ["failure_probability_synth", "failure_probability", "failure_prob", "failure_within_30d_label"]:
+                if col in metrics and metrics[col] is not None:
+                    try:
+                        failure_prob = float(metrics[col])
+                        break
+                    except (ValueError, TypeError):
+                        continue
+
+            feature_list.append(failure_prob)
             
-            last_maintenance = metrics.get("last_maintenance")
-            days_since_maintenance = 0
-            if last_maintenance:
-                if isinstance(last_maintenance, str):
-                    last_maintenance = datetime.fromisoformat(last_maintenance)
-                days_since_maintenance = (datetime.utcnow() - last_maintenance).days
-            
-            features = [
-                metrics.get("uptime_hours", 0),
-                metrics.get("total_sessions", 0),
-                days_since_maintenance,
-                len(metrics.get("error_codes", [])),
-                metrics.get("energy_delivered", 0),
-            ]
-            
-            return np.array(features, dtype=np.float32)
+            return np.array(feature_list, dtype=np.float32)
             
         except Exception as e:
             logger.error(f"Maintenance feature extraction failed: {e}")
