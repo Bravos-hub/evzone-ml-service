@@ -2,6 +2,7 @@
 Training script for failure prediction model.
 """
 import ast
+from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
@@ -11,7 +12,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
-from src.ml.preprocessing.feature_engineering import FEATURE_ORDER, STATUS_TO_INT, days_since
+from src.ml.preprocessing.feature_engineering import FEATURE_ORDER, STATUS_TO_INT
 
 
 def parse_error_codes(val) -> list[str]:
@@ -30,32 +31,43 @@ def parse_error_codes(val) -> list[str]:
 
 
 def build_features(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    from datetime import datetime, timezone
-
-    y = df["failure_within_30d_label"].astype(int).values
+    # Extract labels
+    y = pd.to_numeric(df.get("failure_within_30d_label"), errors="coerce").fillna(0).astype(int).values
 
     # Vectorized connector_status to status_int
-    status_series = df["connector_status"].fillna("AVAILABLE").astype(str).str.upper()
+    status_series = df.get("connector_status", pd.Series("AVAILABLE", index=df.index))
+    status_series = status_series.fillna("AVAILABLE").astype(str).str.upper()
     status_int = status_series.map(STATUS_TO_INT).fillna(0).astype(float)
 
     # Vectorized error_codes to error_count
-    error_count = df["error_codes"].apply(parse_error_codes).apply(len).astype(float)
+    error_codes_col = df.get("error_codes", pd.Series("[]", index=df.index))
+    error_count = error_codes_col.apply(parse_error_codes).apply(len).astype(float)
 
     # Vectorized last_maintenance to days_since_maintenance
     now = datetime.now(timezone.utc)
-    lm_series = pd.to_datetime(df["last_maintenance"], errors="coerce", utc=True)
-    days_since_maint = (now - lm_series).dt.total_seconds() / 86400.0
-    days_since_maint = days_since_maint.fillna(9999.0).clip(lower=0.0).astype(float)
+    lm_col = df.get("last_maintenance")
+    if lm_col is not None:
+        lm_series = pd.to_datetime(lm_col, errors="coerce", utc=True)
+        days_since_maint = (now - lm_series).dt.total_seconds() / 86400.0
+        days_since_maint = days_since_maint.fillna(9999.0).clip(lower=0.0)
+    else:
+        days_since_maint = pd.Series(9999.0, index=df.index)
+    days_since_maint = days_since_maint.astype(float)
+
+    # Helper for numeric columns with robustness to empty strings and missing keys
+    def safe_numeric(col_name):
+        series = df.get(col_name, pd.Series(0.0, index=df.index))
+        return pd.to_numeric(series, errors="coerce").fillna(0.0).astype(float)
 
     # Combine into feature matrix following FEATURE_ORDER
     features_dict = {
         "status_int": status_int,
-        "energy_delivered": df["energy_delivered"].fillna(0.0).astype(float),
-        "power": df["power"].fillna(0.0).astype(float),
-        "temperature": df["temperature"].fillna(0.0).astype(float),
+        "energy_delivered": safe_numeric("energy_delivered"),
+        "power": safe_numeric("power"),
+        "temperature": safe_numeric("temperature"),
         "error_count": error_count,
-        "uptime_hours": df["uptime_hours"].fillna(0.0).astype(float),
-        "total_sessions": df["total_sessions"].fillna(0.0).astype(float),
+        "uptime_hours": safe_numeric("uptime_hours"),
+        "total_sessions": safe_numeric("total_sessions"),
         "days_since_maintenance": days_since_maint,
     }
 

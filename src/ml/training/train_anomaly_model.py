@@ -28,21 +28,29 @@ def parse_error_codes(val) -> list[str]:
 
 
 def build_X(df: pd.DataFrame) -> np.ndarray:
-    rows = []
-    for _, r in df.iterrows():
-        status = str(r.get("connector_status", "AVAILABLE")).upper()
-        status_int = float(STATUS_TO_INT.get(status, 0))
-        err_cnt = float(len(parse_error_codes(r.get("error_codes"))))
-        rows.append(
-            [
-                status_int,
-                float(r.get("energy_delivered", 0.0) or 0.0),
-                float(r.get("power", 0.0) or 0.0),
-                float(r.get("temperature", 0.0) or 0.0),
-                err_cnt,
-            ]
-        )
-    return np.array(rows, dtype=float)
+    # Vectorized connector_status to status_int
+    status_series = df.get("connector_status", pd.Series("AVAILABLE", index=df.index))
+    status_series = status_series.fillna("AVAILABLE").astype(str).str.upper()
+    status_int = status_series.map(STATUS_TO_INT).fillna(0).astype(float)
+
+    # Vectorized error_codes to error_count
+    error_codes_col = df.get("error_codes", pd.Series("[]", index=df.index))
+    error_count = error_codes_col.apply(parse_error_codes).apply(len).astype(float)
+
+    def safe_numeric(col_name):
+        series = df.get(col_name, pd.Series(0.0, index=df.index))
+        return pd.to_numeric(series, errors="coerce").fillna(0.0).astype(float)
+
+    X = np.column_stack(
+        [
+            status_int,
+            safe_numeric("energy_delivered"),
+            safe_numeric("power"),
+            safe_numeric("temperature"),
+            error_count,
+        ]
+    ).astype(float)
+    return X
 
 
 def main() -> None:
@@ -52,19 +60,19 @@ def main() -> None:
 
     df = pd.read_csv(data_path)
 
-    def is_normal_row(r) -> bool:
-        status = str(r.get("connector_status", "AVAILABLE")).upper()
-        temp = float(r.get("temperature", 0.0) or 0.0)
-        errs = parse_error_codes(r.get("error_codes"))
-        if status in {"FAULTY", "OFFLINE", "UNAVAILABLE"}:
-            return False
-        if temp >= 50:
-            return False
-        if len(errs) > 0:
-            return False
-        return True
+    # Vectorized filtering for normal rows
+    status_series = df.get("connector_status", pd.Series("AVAILABLE", index=df.index))
+    status_series = status_series.fillna("AVAILABLE").astype(str).str.upper()
+    temp_series = pd.to_numeric(df.get("temperature"), errors="coerce").fillna(0.0)
+    error_codes_col = df.get("error_codes", pd.Series("[]", index=df.index))
+    error_count = error_codes_col.apply(parse_error_codes).apply(len)
 
-    normal_df = df[df.apply(is_normal_row, axis=1)]
+    is_normal = (
+        (~status_series.isin({"FAULTY", "OFFLINE", "UNAVAILABLE"}))
+        & (temp_series < 50)
+        & (error_count == 0)
+    )
+    normal_df = df[is_normal]
     if len(normal_df) < 100:
         normal_df = df.sample(n=min(500, len(df)), random_state=42)
 
