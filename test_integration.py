@@ -161,10 +161,12 @@ def test_maintenance_optimizer():
 
 def test_model_manager():
     """Test model manager."""
+    import asyncio
     print("Testing model manager...")
     from src.services.model_manager import ModelManager
     
     manager = ModelManager()
+    asyncio.run(manager.initialize_models())
     
     # Check models are loaded
     models = manager.models

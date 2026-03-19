@@ -10,8 +10,10 @@ from src.services.model_manager import ModelManager
 from src.utils.errors import ModelLoadError
 
 
-def test_model_manager_initializes_models():
+@pytest.mark.asyncio
+async def test_model_manager_initializes_models():
     manager = ModelManager()
+    await manager.initialize_models()
     assert set(manager.models.keys()) == {
         "failure_predictor",
         "anomaly_detector",
@@ -22,6 +24,7 @@ def test_model_manager_initializes_models():
 @pytest.mark.asyncio
 async def test_model_manager_list_models():
     manager = ModelManager()
+    await manager.initialize_models()
     models = await manager.list_models()
 
     assert "failure_predictor" in models
@@ -34,6 +37,7 @@ async def test_model_manager_list_models():
 @pytest.mark.asyncio
 async def test_model_manager_unload_reload():
     manager = ModelManager()
+    await manager.initialize_models()
     unloaded = await manager.unload_model("failure_predictor")
 
     assert unloaded is True
@@ -47,6 +51,7 @@ async def test_model_manager_unload_reload():
 @pytest.mark.asyncio
 async def test_model_manager_load_existing_model():
     manager = ModelManager()
+    await manager.initialize_models()
     loaded = await manager.load_model("failure_predictor")
 
     assert loaded is True
@@ -59,10 +64,13 @@ async def test_model_manager_load_unknown_raises():
         await manager.load_model("unknown_model")
 
 
-def test_model_manager_initialize_failure(monkeypatch):
+@pytest.mark.asyncio
+async def test_model_manager_initialize_failure(monkeypatch):
     manager = ModelManager.__new__(ModelManager)
     manager.models = {}
     manager.model_base_path = Path("models")
+    import asyncio
+    manager._init_lock = asyncio.Lock()
 
     original_import = builtins.__import__
 
@@ -74,6 +82,6 @@ def test_model_manager_initialize_failure(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
     with pytest.raises(ModelLoadError):
-        manager._initialize_models()
+        await manager.initialize_models()
 
     assert manager.models == {}

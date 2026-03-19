@@ -36,10 +36,13 @@ async def lifespan(app: FastAPI):
     # Initialize Kafka Producer
     await KafkaProducer.get_instance().start()
 
+    # Initialize ML models
+    model_manager = ModelManager.get_instance()
+    await model_manager.initialize_models()
+
     consumer_task = None
     kafka_consumer = None
     if settings.enable_kafka_consumer:
-        model_manager = ModelManager.get_instance()
         cache_service = CacheService()
         feature_extractor = FeatureExtractor()
         prediction_service = PredictionService(model_manager, feature_extractor, cache_service)

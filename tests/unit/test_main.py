@@ -66,7 +66,10 @@ def test_lifespan_with_kafka_consumer(monkeypatch):
     class DummyModelManager:
         @classmethod
         def get_instance(cls):
-            return object()
+            class DummyInstance:
+                async def initialize_models(self):
+                    pass
+            return DummyInstance()
 
     monkeypatch.setattr(main, "ModelManager", DummyModelManager)
     monkeypatch.setattr(main, "FeatureExtractor", lambda: object())
