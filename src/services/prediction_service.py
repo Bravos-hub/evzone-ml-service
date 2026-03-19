@@ -104,6 +104,14 @@ class PredictionService:
             Maintenance schedule recommendation
         """
         try:
+            # Check cache first
+            cached = await self.cache_service.get_prediction(
+                "maintenance", charger_id, tenant_id=tenant_id
+            )
+            if cached:
+                logger.info(f"Cache HIT for maintenance prediction for charger {charger_id}")
+                return cached
+
             # First get failure prediction
             failure_pred = await self.predict_failure(charger_id, metrics, tenant_id=tenant_id)
             predicted_date = failure_pred.get("predicted_failure_date")
@@ -127,6 +135,11 @@ class PredictionService:
             result["timestamp"] = datetime.utcnow().isoformat()
             if tenant_id:
                 result["tenant_id"] = tenant_id
+
+            # Cache result
+            await self.cache_service.set_prediction(
+                "maintenance", charger_id, result, tenant_id=tenant_id
+            )
 
             prediction_requests.labels(model_type="maintenance_scheduler", status="success").inc()
 
