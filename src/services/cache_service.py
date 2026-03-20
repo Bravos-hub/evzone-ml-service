@@ -1,7 +1,8 @@
 """Production-ready Redis cache service with timeouts, retries, and metrics."""
 import json
 import logging
-from typing import Optional, Any, Literal
+import hashlib
+from typing import Optional, Any, Literal, Dict
 from datetime import datetime
 
 try:
@@ -107,11 +108,29 @@ class CacheService:
         return cls._cache_hits / total if total > 0 else 0.0
     
     @classmethod
-    def _build_key(cls, cache_type: CacheType, charger_id: str, tenant_id: Optional[str] = None) -> str:
-        """Build versioned cache key."""
+    def _build_key(
+        cls,
+        cache_type: CacheType,
+        charger_id: str,
+        tenant_id: Optional[str] = None,
+        fingerprint: Optional[str] = None,
+    ) -> str:
+        """Build versioned cache key with optional fingerprint."""
+        base = f"prediction:{cache_type}:{settings.cache_version}"
         if tenant_id:
-            return f"prediction:{cache_type}:{settings.cache_version}:{tenant_id}:{charger_id}"
-        return f"prediction:{cache_type}:{settings.cache_version}:{charger_id}"
+            base = f"{base}:{tenant_id}"
+
+        key = f"{base}:{charger_id}"
+        if fingerprint:
+            key = f"{key}:{fingerprint}"
+        return key
+
+    @classmethod
+    def _generate_fingerprint(cls, metrics: Dict[str, Any]) -> str:
+        """Generate a deterministic fingerprint for a metrics dictionary."""
+        # Sort keys to ensure consistent hashing
+        serialized = json.dumps(metrics, sort_keys=True, default=str)
+        return hashlib.md5(serialized.encode()).hexdigest()
     
     @classmethod
     def _get_ttl(cls, cache_type: CacheType) -> int:
@@ -172,24 +191,46 @@ class CacheService:
             logger.error(f"Unexpected cache set error: {e}")
             return False
     
-    async def get_prediction(self, cache_type: CacheType, charger_id: str, tenant_id: Optional[str] = None) -> Optional[dict]:
-        """Get prediction from cache with versioned key."""
-        key = self._build_key(cache_type, charger_id, tenant_id=tenant_id)
+    async def get_prediction(
+        self,
+        cache_type: CacheType,
+        charger_id: str,
+        tenant_id: Optional[str] = None,
+        metrics: Optional[Dict[str, Any]] = None,
+    ) -> Optional[dict]:
+        """Get prediction from cache with versioned key and optional metrics fingerprint."""
+        fingerprint = self._generate_fingerprint(metrics) if metrics else None
+        key = self._build_key(cache_type, charger_id, tenant_id=tenant_id, fingerprint=fingerprint)
         return await self.get(key)
-    
-    async def set_prediction(self, cache_type: CacheType, charger_id: str, value: dict, tenant_id: Optional[str] = None) -> bool:
+
+    async def set_prediction(
+        self,
+        cache_type: CacheType,
+        charger_id: str,
+        value: dict,
+        tenant_id: Optional[str] = None,
+        metrics: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """Set prediction in cache with versioned key and type-specific TTL."""
-        key = self._build_key(cache_type, charger_id, tenant_id=tenant_id)
+        fingerprint = self._generate_fingerprint(metrics) if metrics else None
+        key = self._build_key(cache_type, charger_id, tenant_id=tenant_id, fingerprint=fingerprint)
         ttl = self._get_ttl(cache_type)
         return await self.set(key, value, ttl)
-    
-    async def invalidate_prediction(self, cache_type: CacheType, charger_id: str, tenant_id: Optional[str] = None) -> bool:
+
+    async def invalidate_prediction(
+        self,
+        cache_type: CacheType,
+        charger_id: str,
+        tenant_id: Optional[str] = None,
+        metrics: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """Invalidate cached prediction."""
         if not self._client or not self._is_healthy:
             return False
-        
+
         try:
-            key = self._build_key(cache_type, charger_id, tenant_id=tenant_id)
+            fingerprint = self._generate_fingerprint(metrics) if metrics else None
+            key = self._build_key(cache_type, charger_id, tenant_id=tenant_id, fingerprint=fingerprint)
             await self._client.delete(key)
             logger.info(f"Cache INVALIDATED: {key}")
             return True
