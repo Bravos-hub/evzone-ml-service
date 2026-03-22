@@ -2,12 +2,12 @@
 Prediction API endpoints.
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Union
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.api.dependencies import verify_api_key, get_tenant_id
+from src.api.dependencies import verify_api_key, get_tenant_id, get_prediction_service, get_model_manager, get_cache_service
 
 router = APIRouter()
 
@@ -102,18 +102,6 @@ class MaintenanceScheduleResponse(BaseModel):
     timestamp: datetime
 
 
-class BatchPredictionRequest(BaseModel):
-    """Batch prediction request."""
-    chargers: List[ChargerMetrics]
-
-
-class BatchPredictionResponse(BaseModel):
-    """Batch prediction response."""
-    predictions: List[FailurePredictionResponse]
-    total: int
-    timestamp: datetime
-
-
 class AnomalyDetectionRequest(BaseModel):
     """Request for anomaly detection."""
     charger_id: str
@@ -143,6 +131,19 @@ class AnomalyDetectionResponse(BaseModel):
     anomaly_type: str
     deviation: Dict[str, float] = Field(default_factory=dict)
     model_version: str
+    timestamp: datetime
+
+
+class BatchPredictionRequest(BaseModel):
+    """Batch prediction request."""
+    prediction_type: Literal["failure", "maintenance", "anomaly"] = "failure"
+    chargers: List[ChargerMetrics]
+
+
+class BatchPredictionResponse(BaseModel):
+    """Batch prediction response."""
+    predictions: List[Union[FailurePredictionResponse, MaintenanceScheduleResponse, AnomalyDetectionResponse]]
+    total: int
     timestamp: datetime
 
 
@@ -271,6 +272,7 @@ def _build_anomaly_response(result: Dict[str, Any], tenant_id: Optional[str]) ->
 @router.post("/predictions/failure", response_model=FailurePredictionResponse)
 async def predict_failure(
     request: FailurePredictionRequest,
+    prediction_service=Depends(get_prediction_service),
     api_key: str = Depends(verify_api_key),
     tenant_id: Optional[str] = Depends(get_tenant_id),
 ):
@@ -280,17 +282,6 @@ async def predict_failure(
     Returns failure probability, predicted failure date, and recommended actions.
     """
     try:
-        from src.services.model_manager import ModelManager
-        from src.services.cache_service import CacheService
-        from src.services.feature_extractor import FeatureExtractor
-        from src.services.prediction_service import PredictionService
-
-        # Initialize services (in production, use dependency injection)
-        model_manager = ModelManager.get_instance()
-        cache_service = CacheService()
-        feature_extractor = FeatureExtractor()
-        prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
-
         # Convert Pydantic model to dict
         metrics_dict = request.metrics.model_dump()
 
@@ -312,6 +303,7 @@ async def predict_failure(
 @router.post("/predictions/maintenance", response_model=MaintenanceScheduleResponse)
 async def predict_maintenance(
     request: MaintenanceScheduleRequest,
+    prediction_service=Depends(get_prediction_service),
     api_key: str = Depends(verify_api_key),
     tenant_id: Optional[str] = Depends(get_tenant_id),
 ):
@@ -321,17 +313,6 @@ async def predict_maintenance(
     Returns recommended maintenance date and urgency level.
     """
     try:
-        from src.services.model_manager import ModelManager
-        from src.services.cache_service import CacheService
-        from src.services.feature_extractor import FeatureExtractor
-        from src.services.prediction_service import PredictionService
-
-        # Initialize services
-        model_manager = ModelManager.get_instance()
-        cache_service = CacheService()
-        feature_extractor = FeatureExtractor()
-        prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
-
         # Convert Pydantic model to dict
         metrics_dict = request.metrics.model_dump()
 
@@ -353,6 +334,7 @@ async def predict_maintenance(
 @router.get("/predictions/{charger_id}", response_model=FailurePredictionResponse)
 async def get_cached_prediction(
     charger_id: str,
+    cache_service=Depends(get_cache_service),
     api_key: str = Depends(verify_api_key),
     tenant_id: Optional[str] = Depends(get_tenant_id),
 ):
@@ -362,9 +344,6 @@ async def get_cached_prediction(
     Returns the most recent prediction if available in cache.
     """
     try:
-        from src.services.cache_service import CacheService
-
-        cache_service = CacheService()
         cached = await cache_service.get_prediction("failure", charger_id, tenant_id=tenant_id)
 
         if not cached:
@@ -383,40 +362,56 @@ async def get_cached_prediction(
         )
 
 
+import asyncio
+
 @router.post("/predictions/batch", response_model=BatchPredictionResponse)
 async def batch_predictions(
     request: BatchPredictionRequest,
+    prediction_service=Depends(get_prediction_service),
     api_key: str = Depends(verify_api_key),
+    tenant_id: Optional[str] = Depends(get_tenant_id),
 ):
     """
     Get predictions for multiple chargers in a single request.
 
-    Optimized for batch processing.
+    Optimized for batch processing using asyncio.gather for concurrent prediction service calls.
     """
     try:
-        predictions = []
-
+        # Prepare concurrent tasks
+        tasks = []
         for charger in request.chargers:
-            predicted_window = PredictedFailureWindow(
-                start=datetime.utcnow(),
-                end=datetime.utcnow(),
-            )
-            predictions.append(
-                FailurePredictionResponse(
-                    charger_id=charger.charger_id,
-                    failure_probability=0.15,
-                    predicted_failure_date=None,
-                    predicted_failure_window=predicted_window,
-                    confidence=0.85,
-                    confidence_score=0.85,
-                    recommended_action="WITHIN_30_DAYS",
-                    recommended_action_window="WITHIN_30_DAYS",
-                    recommended_actions=["Monitor"],
-                    top_contributing_factors=[],
-                    model_version="v1.0.0",
-                    timestamp=datetime.utcnow(),
+            metrics_dict = charger.model_dump()
+            if request.prediction_type == "failure":
+                task = prediction_service.predict_failure(
+                    charger.charger_id, metrics_dict, tenant_id=tenant_id
                 )
-            )
+            elif request.prediction_type == "maintenance":
+                task = prediction_service.predict_maintenance(
+                    charger.charger_id, metrics_dict, tenant_id=tenant_id
+                )
+            elif request.prediction_type == "anomaly":
+                task = prediction_service.detect_anomaly(
+                    charger.charger_id, metrics_dict, tenant_id=tenant_id
+                )
+            tasks.append(task)
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        predictions = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                # Log or handle individual errors? Let's skip them or handle gracefully
+                # For batch, missing one shouldn't fail the whole request
+                # For now, we skip failed predictions
+                continue
+
+            if request.prediction_type == "failure":
+                predictions.append(_build_failure_response(result, tenant_id))
+            elif request.prediction_type == "maintenance":
+                predictions.append(_build_maintenance_response(result, tenant_id))
+            elif request.prediction_type == "anomaly":
+                predictions.append(_build_anomaly_response(result, tenant_id))
 
         return BatchPredictionResponse(
             predictions=predictions,
@@ -433,6 +428,7 @@ async def batch_predictions(
 @router.post("/predictions/anomaly", response_model=AnomalyDetectionResponse)
 async def detect_anomaly(
     request: AnomalyDetectionRequest,
+    prediction_service=Depends(get_prediction_service),
     api_key: str = Depends(verify_api_key),
     tenant_id: Optional[str] = Depends(get_tenant_id),
 ):
@@ -442,17 +438,6 @@ async def detect_anomaly(
     Returns anomaly score and classification.
     """
     try:
-        from src.services.model_manager import ModelManager
-        from src.services.cache_service import CacheService
-        from src.services.feature_extractor import FeatureExtractor
-        from src.services.prediction_service import PredictionService
-
-        # Initialize services
-        model_manager = ModelManager.get_instance()
-        cache_service = CacheService()
-        feature_extractor = FeatureExtractor()
-        prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
-
         # Convert Pydantic model to dict
         metrics_dict = request.metrics.model_dump()
 
@@ -476,14 +461,12 @@ async def detect_anomaly(
 @router.post("/anomaly/detect", response_model=AnomalyDetectionResponse)
 async def detect_anomaly_flat(
     request: AnomalyDetectionRequestFlat,
+    model_manager=Depends(get_model_manager),
     api_key: str = Depends(verify_api_key),
     tenant_id: Optional[str] = Depends(get_tenant_id),
 ):
     """Compatibility endpoint matching the original flat anomaly schema."""
     try:
-        from src.services.model_manager import ModelManager
-
-        model_manager = ModelManager.get_instance()
         detector = await model_manager.get_model("anomaly_detector")
         if not detector:
             raise HTTPException(
@@ -518,21 +501,12 @@ async def detect_anomaly_flat(
 @router.post("/maintenance/recommend", response_model=MaintenanceScheduleResponse)
 async def recommend_maintenance(
     request: MaintenanceRecommendationRequest,
+    prediction_service=Depends(get_prediction_service),
     api_key: str = Depends(verify_api_key),
     tenant_id: Optional[str] = Depends(get_tenant_id),
 ):
     """Compatibility endpoint matching the original maintenance route."""
     try:
-        from src.services.model_manager import ModelManager
-        from src.services.cache_service import CacheService
-        from src.services.feature_extractor import FeatureExtractor
-        from src.services.prediction_service import PredictionService
-
-        model_manager = ModelManager.get_instance()
-        cache_service = CacheService()
-        feature_extractor = FeatureExtractor()
-        prediction_service = PredictionService(model_manager, feature_extractor, cache_service)
-
         metrics_dict = request.metrics.model_dump()
         result = await prediction_service.predict_maintenance(
             request.charger_id,
